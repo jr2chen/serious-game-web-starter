@@ -1,4 +1,4 @@
-# Commons — Stage top bar, 3 rows (pre–Epic 4)
+# Commons — Tailwind UI migration (pre–Epic 4)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -14,7 +14,7 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 **Epic 0–2** — UI shell, teams/roles, CSV content  
 **Epic 3** — Firebase rooms, roster, rejoin  
-**This slice** — the sticky stage header is now three simple rows  
+**This slice** — UI styles moved to Tailwind (so markup and look stay in one place)  
 **Next** — Epic 4 (editable team proposals)
 
 ---
@@ -145,7 +145,17 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | [`lib/content/`](lib/content/) | CSV parse + load |
 | [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
-| [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Screens |
+| [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Screens (Tailwind utilities in JSX) |
+| [`app/globals.css`](app/globals.css) | Color tokens + a few shared recipes (`.btn`, `.card`, `.chip`) |
+| [`app/layout.tsx`](app/layout.tsx) | Fonts + page shell |
+| [`next.config.ts`](next.config.ts) | Turbopack filesystem cache off in dev (avoids stale CSS) |
+
+### Styling
+
+- Prefer **Tailwind utility classes in the JSX** for layout and one-off visuals.
+- Reuse the small recipes in [`app/globals.css`](app/globals.css) (`.btn`, `.card`, `.chip`, `.label-mono`) when a widget appears in several places.
+- Change the palette in the `:root` block of `globals.css` — those tokens feed Tailwind (`bg-forest`, `text-ink-soft`, etc.).
+- Avoid adding large new custom CSS files; keep styles next to the markup so renames can’t silently drop styling.
 
 ---
 
