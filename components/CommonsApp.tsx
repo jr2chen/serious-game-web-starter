@@ -832,7 +832,7 @@ export default function CommonsApp() {
                   {hiddenRole.description}
                 </p>
                 <p className="mb-2 text-[12.5px] leading-[1.45] text-ink-soft">
-                  You score 1 point at end of game if{" "}
+                  You score 1 extra point at end of game if{" "}
                   {roleRuleLabel(
                     hiddenRole.target_category,
                     hiddenRole.comparison,
