@@ -1,11 +1,11 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { parseCsv, requireFields } from "@/lib/content/parseCsv";
+import { isComparisonOp } from "@/lib/game/scoring";
 import type {
   CategoryId,
   HiddenRole,
   Scenario,
-  ScoreCondition,
   StarterProposal,
   TeamId,
 } from "@/lib/game/types";
@@ -71,20 +71,27 @@ export async function loadRoles(): Promise<HiddenRole[]> {
         "role_name",
         "description",
         "target_category",
-        "score_condition",
+        "comparison",
+        "threshold",
       ],
       `roles.csv row ${index + 2}`,
     );
     const target = row.target_category as CategoryId;
-    const condition = row.score_condition as ScoreCondition;
+    const comparison = row.comparison!;
+    const threshold = Number(row.threshold);
     if (!CATEGORY_IDS.includes(target)) {
       throw new Error(
         `roles.csv row ${index + 2}: unknown target_category "${row.target_category}"`,
       );
     }
-    if (condition !== "positive" && condition !== "non_positive") {
+    if (!isComparisonOp(comparison)) {
       throw new Error(
-        `roles.csv row ${index + 2}: unknown score_condition "${row.score_condition}"`,
+        `roles.csv row ${index + 2}: unknown comparison "${row.comparison}". Allowed: > >= < <= =`,
+      );
+    }
+    if (!Number.isFinite(threshold)) {
+      throw new Error(
+        `roles.csv row ${index + 2}: threshold must be a number`,
       );
     }
     return {
@@ -92,7 +99,8 @@ export async function loadRoles(): Promise<HiddenRole[]> {
       role_name: row.role_name!,
       description: row.description!,
       target_category: target,
-      score_condition: condition,
+      comparison,
+      threshold,
     };
   });
 }

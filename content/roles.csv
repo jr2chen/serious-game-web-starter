@@ -1,6 +1,6 @@
-role_id,role_name,description,target_category,score_condition
-labour,Labour Representative,You want the city to create more jobs.,jobs,positive
-housing,Housing Advocate,You want the city to improve housing supply and affordability.,housing,positive
-accessibility,Accessibility Advocate,You want the city to become more accessible.,accessibility,positive
-environment,Environmental Advocate,You want the city to improve its climate outcomes.,climate,positive
-fiscal,Fiscal Watchdog,You want the city to avoid increasing costs.,cost,less than 2
+role_id,role_name,description,target_category,comparison,threshold
+labour,Labour Representative,You want the city to create more jobs.,jobs,>,0
+housing,Housing Advocate,You want the city to improve housing supply and affordability.,housing,>,0
+accessibility,Accessibility Advocate,You want the city to become more accessible.,accessibility,>,0
+environment,Environmental Advocate,You want the city to improve its climate outcomes.,climate,>,0
+fiscal,Fiscal Watchdog,You want the city to keep Cost under +2 across the session.,cost,<,2

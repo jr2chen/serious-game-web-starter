@@ -45,28 +45,36 @@ Each team submits written proposal + suggested changes for all five categories. 
 
 ### Hidden roles
 
-Each player gets one hidden role: one **target category** + one **score condition**. Roles score **once at end of game** (1 if met, else 0). Individual — separate from team scores. Roles may duplicate if more than five players.
+Each player gets one hidden role: one **target category**, a **comparison**, and a **threshold**. Roles score **once at end of game** (1 if met, else 0). Individual — separate from team scores. Roles may duplicate if more than five players.
 
-| Condition | Succeeds when |
+| comparison | Succeeds when |
 | --- | --- |
-| `positive` | Final category total `> 0` |
-| `non_positive` | Final category total `<= 0` |
+| `>` | Final total is greater than threshold |
+| `>=` | Final total is at least threshold |
+| `<` | Final total is less than threshold |
+| `<=` | Final total is at most threshold |
+| `=` | Final total equals threshold |
 
-Locked roles:
+Editors set any number as the threshold (commonly `0` or `2`).
 
-| role_id | Name | Target | Condition |
-| --- | --- | --- | --- |
-| labour | Labour Representative | jobs | positive |
-| housing | Housing Advocate | housing | positive |
-| accessibility | Accessibility Advocate | accessibility | positive |
-| environment | Environmental Advocate | climate | positive |
-| fiscal | Fiscal Watchdog | cost | non_positive |
+Locked starter roles:
 
-CSV shape (later):
+| role_id | Name | Target | comparison | threshold |
+| --- | --- | --- | --- | --- |
+| labour | Labour Representative | jobs | `>` | 0 |
+| housing | Housing Advocate | housing | `>` | 0 |
+| accessibility | Accessibility Advocate | accessibility | `>` | 0 |
+| environment | Environmental Advocate | climate | `>` | 0 |
+| fiscal | Fiscal Watchdog | cost | `<` | 2 |
+
+Cost usually rises when the city acts, so Fiscal Watchdog keeps the session Cost **below +2** by default — change the threshold in CSV anytime.
+
+CSV shape:
 
 ```csv
-role_id,role_name,description,target_category,score_condition
-labour,Labour Representative,You want the city to create more jobs.,jobs,positive
+role_id,role_name,description,target_category,comparison,threshold
+labour,Labour Representative,You want the city to create more jobs.,jobs,>,0
+fiscal,Fiscal Watchdog,You want the city to keep Cost under +2 across the session.,cost,<,2
 ```
 
 ### Locked V1 summary
@@ -77,6 +85,7 @@ labour,Labour Representative,You want the city to create more jobs.,jobs,positiv
 - Team scores = sum of that team’s two categories
 - No proposal-win / compromise / participation bonuses
 - Hidden roles score once at the end
+- Fiscal Watchdog defaults to Cost `< 2` (editable in CSV via comparison + threshold)
 - Proposal outcomes stay human-judged
 
 ---

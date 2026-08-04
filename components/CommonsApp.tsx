@@ -19,6 +19,7 @@ import type {
   TeamId,
 } from "@/lib/game/types";
 import { CATEGORIES, EMOJI_OPTIONS, TEAMS } from "@/lib/game/constants";
+import { roleRuleLabel } from "@/lib/game/scoring";
 
 type Screen = "main" | "entry" | "stage";
 
@@ -38,10 +39,6 @@ const DELTA_KEYS: CategoryId[] = [
   "climate",
   "cost",
 ];
-
-function conditionLabel(condition: HiddenRole["score_condition"]): string {
-  return condition === "positive" ? "ends above 0" : "ends at 0 or below";
-}
 
 function formatDelta(value: number): string {
   return value > 0 ? `+${value}` : String(value);
@@ -332,8 +329,12 @@ export default function CommonsApp() {
                 <p className="role-desc">{hiddenRole.description}</p>
                 <p className="role-rule">
                   You score 1 point at end of game if{" "}
-                  <strong>{hiddenRole.target_category}</strong>{" "}
-                  {conditionLabel(hiddenRole.score_condition)}.
+                  {roleRuleLabel(
+                    hiddenRole.target_category,
+                    hiddenRole.comparison,
+                    hiddenRole.threshold,
+                  )}
+                  .
                 </p>
               </div>
 

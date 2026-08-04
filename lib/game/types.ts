@@ -7,7 +7,8 @@ export type CategoryId =
   | "climate"
   | "cost";
 
-export type ScoreCondition = "positive" | "non_positive";
+/** How the final category total is compared to the threshold. */
+export type ComparisonOp = ">" | ">=" | "<" | "<=" | "=";
 
 export type Team = {
   id: TeamId;
@@ -27,7 +28,8 @@ export type HiddenRole = {
   role_name: string;
   description: string;
   target_category: CategoryId;
-  score_condition: ScoreCondition;
+  comparison: ComparisonOp;
+  threshold: number;
 };
 
 export type CategoryTotals = Record<CategoryId, number>;

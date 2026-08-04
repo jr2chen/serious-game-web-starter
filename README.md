@@ -35,15 +35,84 @@ Round 2 (Expanding Transportation Access) is already in the CSV files for later.
 
 ---
 
-## Edit the game in CSV
+## How to edit the CSVs
 
-| File | What it controls |
-| --- | --- |
-| [`content/scenarios.csv`](content/scenarios.csv) | Round order, title, problem, team task, discussion seconds |
-| [`content/roles.csv`](content/roles.csv) | Hidden roles and scoring conditions |
-| [`content/starter_proposals.csv`](content/starter_proposals.csv) | Red/Blue starter text + suggested −2…+2 deltas |
+All workshop content lives in [`content/`](content/). You can open these in Excel, Google Sheets, or any text editor. **You do not need to change React code** to rewrite scenarios, roles, or starter proposals.
 
-Change a cell, refresh, join again — the stage should show the new copy.
+After you save a file:
+
+1. Keep `npm run dev` running (or restart it if the server was stopped)
+2. Refresh the browser
+3. Join or create a room again so content reloads
+
+If something is wrong (missing column, bad number, unknown category), the join screen shows a clear error message.
+
+### Tips that avoid breakage
+
+- Keep the **header row** exactly as-is (column names matter)
+- If text contains commas, wrap it in double quotes: `"Like this, with a comma"`
+- Do not delete required columns
+- `scenario_id` values must match between `scenarios.csv` and `starter_proposals.csv`
+
+---
+
+### `content/scenarios.csv`
+
+One row = one round.
+
+| Column | Meaning | Example |
+| --- | --- | --- |
+| `scenario_id` | Stable id (used by starter proposals) | `downtown_redevelopment` |
+| `title` | Short title on the stage | `Downtown Redevelopment` |
+| `problem` | The situation players discuss | long paragraph |
+| `team_task` | What each team must propose | long paragraph |
+| `discussion_seconds` | Suggested discussion length | `240` (= 4 minutes) |
+| `round_order` | Play order (`1`, then `2`, …) | `1` |
+
+Right now the app **always loads round_order 1** on stage. Round 2 is already in the file for later.
+
+---
+
+### `content/roles.csv`
+
+One row = one hidden role. A player is randomly assigned one role when they enter.
+
+| Column | Meaning | Allowed values |
+| --- | --- | --- |
+| `role_id` | Stable id | e.g. `fiscal` |
+| `role_name` | Shown on the private role card | e.g. `Fiscal Watchdog` |
+| `description` | What the player is pushing for | free text |
+| `target_category` | Which city total is checked | `jobs` `housing` `accessibility` `climate` `cost` |
+| `comparison` | How that total is compared | `>` `>=` `<` `<=` `=` |
+| `threshold` | Number to compare against | any number, often `0` or `2` |
+
+**Scoring rule:** at end of game the player scores **1 point** if  
+`final[target_category] comparison threshold` is true, else **0**.
+
+Examples:
+
+| Goal | comparison | threshold |
+| --- | --- | --- |
+| Jobs end above zero | `>` | `0` |
+| Cost stays at 0 or below | `<=` | `0` |
+| Cost stays under +2 | `<` | `2` |
+
+Default Fiscal Watchdog uses `cost` + `<` + `2` so the role is still achievable when projects cost money.
+
+---
+
+### `content/starter_proposals.csv`
+
+One row = one team’s starting draft for a scenario (Red or Blue).
+
+| Column | Meaning | Notes |
+| --- | --- | --- |
+| `scenario_id` | Must match a row in `scenarios.csv` | |
+| `team` | `red` or `blue` | |
+| `proposal_text` | Starting proposal wording | quote if it has commas |
+| `jobs` `housing` `accessibility` `climate` `cost` | Suggested effects | whole numbers from **-2 to +2** |
+
+These show as **read-only** on the stage in Epic 2. Players will edit/submit them in a later epic.
 
 ---
 
