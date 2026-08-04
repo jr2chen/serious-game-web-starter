@@ -123,6 +123,14 @@ export async function createRoom(themeId: ThemeId): Promise<Room> {
   throw new Error("Could not allocate a free room code. Try again.");
 }
 
+export async function getRoom(roomCode: string): Promise<Room | null> {
+  await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  const snap = await getDoc(doc(db, ROOMS, roomCode));
+  if (!snap.exists()) return null;
+  return roomFromDoc(snap.id, snap.data());
+}
+
 /** Set room.playerCount from the actual players subcollection size. */
 export async function syncRoomPlayerCount(roomCode: string): Promise<number> {
   await ensureAnonymousUser();

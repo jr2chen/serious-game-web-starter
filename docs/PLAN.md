@@ -172,7 +172,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** Demo rooms are gone; create + list + join work against Firestore.
 
-### Slice C — Live roster + role privacy (current)
+### Slice C — Live roster + role privacy (done)
 
 **Goal:** Everyone in the room sees who joined; hidden roles stay private.
 
@@ -183,6 +183,19 @@ Join/create → name + emoji → stage with one mock scenario.
 - As a player, re-joining the same browser seat updates my roster row without double-counting
 
 **Done when:** Two devices in one room see each other on the roster; each only sees their own role card.
+
+### Slice D — Rejoin after refresh (current)
+
+**Goal:** Refreshing the tab does not trap you out of a room you still belong to.
+
+**Stories:**
+- As a player, if I refresh while still seated, Main shows a **Rejoin** button for that room
+- As a player, Rejoin restores my name, mark, team, and private role without re-picking
+- As a player, **Leave room** clears the rejoin offer for this tab
+
+**Keep simple:** `sessionStorage` + existing player/secret docs; no auto-jump onto stage.
+
+**Done when:** Refresh → Main with Rejoin → Stage with the same seat.
 
 ---
 
@@ -216,11 +229,12 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 2. Epic 2 — CSV scenarios / roles / starter proposals (done)
 3. **Epic 3a** — Firebase env + client wiring (done)
 4. Epic 3b — create/join + last-hour room list (done)
-5. **Epic 3c** — live roster + private role secrets (this slice)
-6. Epic 4 — editable private team proposals
-7. Epic 5 — reveal + facilitator apply deltas
-8. Epic 6 — derived scores + next/end
-9. Epic 7 — polish
+5. Epic 3c — live roster + private role secrets (done)
+6. **Epic 3d** — rejoin button after refresh (this slice)
+7. Epic 4 — editable private team proposals
+8. Epic 5 — reveal + facilitator apply deltas
+9. Epic 6 — derived scores + next/end
+10. Epic 7 — polish
 
 ---
 

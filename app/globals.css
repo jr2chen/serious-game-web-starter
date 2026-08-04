@@ -108,6 +108,30 @@ h1.title {
   flex: 1;
 }
 
+.rejoin-banner {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--clay) 12%, var(--paper));
+}
+
+.rejoin-copy {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.rejoin-banner .btn {
+  width: 100%;
+}
+
+.rejoin-banner .load-error {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 .section-label {
   font-family: var(--font-mono-face), monospace;
   font-size: 11px;

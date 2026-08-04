@@ -6,9 +6,11 @@ import {
   createRoom,
   enterRoom,
   getCategoryTotals,
+  getRoom,
   getScenario,
   getStarterProposal,
   listRooms,
+  loadMySeat,
   watchRoomPlayers,
 } from "@/lib/api/client";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
@@ -25,6 +27,11 @@ import type {
 } from "@/lib/game/types";
 import { CATEGORIES, EMOJI_OPTIONS, TEAMS } from "@/lib/game/constants";
 import { roleRuleLabel } from "@/lib/game/scoring";
+import {
+  clearActiveRoom,
+  readActiveRoomCode,
+  rememberActiveRoom,
+} from "@/lib/game/session";
 import { THEME_LIST } from "@/lib/game/themes";
 
 type Screen = "main" | "create" | "entry" | "stage";
@@ -75,6 +82,8 @@ export default function CommonsApp() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [roster, setRoster] = useState<RoomPlayer[]>([]);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [rejoinCode, setRejoinCode] = useState<string | null>(null);
+  const [rejoining, setRejoining] = useState(false);
 
   const refreshRooms = useCallback(async () => {
     if (!isFirebaseConfigured()) {
@@ -102,6 +111,29 @@ export default function CommonsApp() {
   useEffect(() => {
     void refreshRooms();
   }, [refreshRooms]);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+
+    let active = true;
+    const code = readActiveRoomCode();
+    if (!code) return;
+
+    void (async () => {
+      try {
+        const seat = await loadMySeat(code);
+        if (!active) return;
+        if (seat) setRejoinCode(code);
+        else clearActiveRoom();
+      } catch {
+        if (active) clearActiveRoom();
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom) {
@@ -135,6 +167,8 @@ export default function CommonsApp() {
   }, [screen, selectedRoom]);
 
   function goMain() {
+    clearActiveRoom();
+    setRejoinCode(null);
     setScreen("main");
     setEntryMode(null);
     setSelectedRoom(null);
@@ -219,11 +253,58 @@ export default function CommonsApp() {
       setHiddenRole(role);
       setCategories(totals);
       setRoomLabel(`${selectedRoom.code} · ${selectedRoom.themeName}`);
+      rememberActiveRoom(selectedRoom.code);
+      setRejoinCode(null);
       setScreen("stage");
     } catch (error) {
       setLoadError(
         error instanceof Error ? error.message : "Could not load game content",
       );
+    }
+  }
+
+  async function rejoinRoom() {
+    if (!rejoinCode) return;
+    setRejoining(true);
+    setLoadError(null);
+    try {
+      const [room, seat] = await Promise.all([
+        getRoom(rejoinCode),
+        loadMySeat(rejoinCode),
+      ]);
+      if (!room || !seat) {
+        clearActiveRoom();
+        setRejoinCode(null);
+        throw new Error("That room seat is no longer available.");
+      }
+
+      const [nextScenario, totals] = await Promise.all([
+        getScenario(room.id),
+        getCategoryTotals(),
+      ]);
+      const proposal = await getStarterProposal(
+        nextScenario.scenario_id,
+        seat.player.team,
+      );
+
+      setSelectedRoom(room);
+      setName(seat.player.displayName);
+      setEmoji(seat.player.emoji);
+      setTeam(seat.player.team);
+      setScenario(nextScenario);
+      setStarter(proposal);
+      setHiddenRole(seat.role);
+      setCategories(totals);
+      setRoomLabel(`${room.code} · ${room.themeName}`);
+      rememberActiveRoom(room.code);
+      setRejoinCode(null);
+      setScreen("stage");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not rejoin room",
+      );
+    } finally {
+      setRejoining(false);
     }
   }
 
@@ -272,6 +353,25 @@ export default function CommonsApp() {
             </p>
           </div>
           <div className="main-body">
+            {rejoinCode && (
+              <div className="rejoin-banner">
+                <p className="rejoin-copy">
+                  You still have a seat in room <strong>{rejoinCode}</strong>.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={rejoining}
+                  onClick={() => void rejoinRoom()}
+                >
+                  {rejoining ? "Rejoining…" : `Rejoin ${rejoinCode}`}
+                </button>
+                {loadError && screen === "main" && (
+                  <p className="load-error">{loadError}</p>
+                )}
+              </div>
+            )}
+
             <div className="section-row">
               <p className="section-label">Open rooms · last hour</p>
               <button

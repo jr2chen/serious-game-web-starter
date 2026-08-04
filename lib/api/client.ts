@@ -11,11 +11,14 @@ import type {
 import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
 import {
   createRoom as createFirestoreRoom,
+  getRoom as getFirestoreRoom,
   listRecentRooms,
 } from "@/lib/firebase/rooms";
 import {
+  getMySeatInRoom,
   joinRoomAsPlayer,
   subscribeToRoomPlayers,
+  type PlayerSeat,
 } from "@/lib/firebase/players";
 import type { Unsubscribe } from "firebase/firestore";
 
@@ -34,6 +37,10 @@ export async function listRooms(): Promise<Room[]> {
   return listRecentRooms();
 }
 
+export async function getRoom(roomCode: string): Promise<Room | null> {
+  return getFirestoreRoom(roomCode);
+}
+
 export async function createRoom(themeId: ThemeId): Promise<Room> {
   return createFirestoreRoom(themeId);
 }
@@ -46,6 +53,12 @@ export async function enterRoom(input: {
   role: HiddenRole;
 }): Promise<void> {
   await joinRoomAsPlayer(input);
+}
+
+export async function loadMySeat(
+  roomCode: string,
+): Promise<PlayerSeat | null> {
+  return getMySeatInRoom(roomCode);
 }
 
 export async function watchRoomPlayers(

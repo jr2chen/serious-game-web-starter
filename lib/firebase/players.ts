@@ -2,6 +2,7 @@ import {
   Timestamp,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -12,9 +13,23 @@ import {
 import { ensureAnonymousUser } from "@/lib/firebase/auth";
 import { getFirebaseDb } from "@/lib/firebase/client";
 import { syncRoomPlayerCount } from "@/lib/firebase/rooms";
-import type { HiddenRole, RoomPlayer, TeamId } from "@/lib/game/types";
+import { CATEGORIES } from "@/lib/game/constants";
+import type {
+  CategoryId,
+  ComparisonOp,
+  HiddenRole,
+  RoomPlayer,
+  TeamId,
+} from "@/lib/game/types";
+import { isComparisonOp } from "@/lib/game/scoring";
 
 const ROOMS = "rooms";
+const CATEGORY_IDS = new Set<string>(CATEGORIES.map((c) => c.id));
+
+export type PlayerSeat = {
+  player: RoomPlayer;
+  role: HiddenRole;
+};
 
 function playerFromDoc(
   id: string,
@@ -35,6 +50,39 @@ function playerFromDoc(
   }
 
   return { id, displayName, emoji, team, joinedAtMs };
+}
+
+function roleFromDoc(data: Record<string, unknown>): HiddenRole | null {
+  const role_id = typeof data.role_id === "string" ? data.role_id : null;
+  const role_name = typeof data.role_name === "string" ? data.role_name : null;
+  const description =
+    typeof data.description === "string" ? data.description : null;
+  const target_category =
+    typeof data.target_category === "string" ? data.target_category : null;
+  const comparison = data.comparison;
+  const threshold = Number(data.threshold);
+
+  if (
+    !role_id ||
+    !role_name ||
+    !description ||
+    !target_category ||
+    !CATEGORY_IDS.has(target_category) ||
+    typeof comparison !== "string" ||
+    !isComparisonOp(comparison) ||
+    !Number.isFinite(threshold)
+  ) {
+    return null;
+  }
+
+  return {
+    role_id,
+    role_name,
+    description,
+    target_category: target_category as CategoryId,
+    comparison: comparison as ComparisonOp,
+    threshold,
+  };
 }
 
 /**
@@ -70,6 +118,26 @@ export async function joinRoomAsPlayer(input: {
   });
 
   await syncRoomPlayerCount(input.roomCode);
+}
+
+/** Load this browser's seat in a room, if it still exists. */
+export async function getMySeatInRoom(
+  roomCode: string,
+): Promise<PlayerSeat | null> {
+  const user = await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  const playerSnap = await getDoc(
+    doc(db, ROOMS, roomCode, "players", user.uid),
+  );
+  const secretSnap = await getDoc(
+    doc(db, ROOMS, roomCode, "secrets", user.uid),
+  );
+  if (!playerSnap.exists() || !secretSnap.exists()) return null;
+
+  const player = playerFromDoc(playerSnap.id, playerSnap.data());
+  const role = roleFromDoc(secretSnap.data());
+  if (!player || !role) return null;
+  return { player, role };
 }
 
 /** Live public roster — does not include hidden roles. */
