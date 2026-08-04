@@ -41,18 +41,16 @@ body {
 
 .device {
   width: 420px;
-  min-height: 780px;
   background: var(--paper);
   border-radius: 20px;
   border: 1px solid var(--line);
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
 }
 
 .screen {
   display: none;
-  min-height: 780px;
   flex-direction: column;
 }
 
@@ -319,7 +317,7 @@ input.name-input:focus {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 8px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .emoji-opt {
@@ -339,8 +337,161 @@ input.name-input:focus {
   background: var(--forest-line);
 }
 
+.team-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.team-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  font-family: var(--font-body), system-ui, sans-serif;
+  color: inherit;
+}
+
+.team-opt-name {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.team-opt-goal {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.team-opt-red.selected {
+  border-color: var(--rust);
+  background: #f6ebe4;
+}
+
+.team-opt-blue.selected {
+  border-color: #2c5570;
+  background: #e4eef5;
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .entry-footer {
   margin-top: auto;
+}
+
+.team-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+}
+
+.team-badge-red {
+  background: #f6ebe4;
+  border-color: #e0c4b4;
+}
+
+.team-badge-blue {
+  background: #e4eef5;
+  border-color: #c5d6e4;
+}
+
+.team-badge-name {
+  font-family: var(--font-display-face), serif;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.team-badge-goal {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.role-card {
+  background: var(--card);
+  border: 1px dashed var(--clay-deep);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.role-eyebrow {
+  font-family: var(--font-mono-face), monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--clay-deep);
+  margin: 0 0 8px;
+}
+
+.role-name {
+  font-family: var(--font-display-face), serif;
+  font-weight: 600;
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.role-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.role-rule {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.category-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.category-chip {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+}
+
+.category-name {
+  display: block;
+  font-family: var(--font-mono-face), monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+.category-value {
+  display: block;
+  font-family: var(--font-display-face), serif;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.category-note {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin: 0 0 22px;
+  line-height: 1.4;
 }
 
 .stage-header {
@@ -467,7 +618,7 @@ h2.scenario-title {
     border: none;
   }
 
-  .screen {
+  .screen.active {
     min-height: 100dvh;
   }
 }
