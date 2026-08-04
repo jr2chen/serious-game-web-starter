@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commons — prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper: #F1EDE1;
+    --paper-deep: #E9E3D2;
+    --card: #FBF9F2;
+    --ink: #23291F;
+    --ink-soft: #565E4D;
+    --forest: #33473B;
+    --forest-dark: #24352A;
+    --forest-line: #D7DCC9;
+    --clay: #B98A54;
+    --clay-deep: #8C6435;
+    --rust: #B5502F;
+    --line: #DBD4C0;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    font-family: var(--font-body);
+    background: var(--paper-deep);
+    color: var(--ink);
+    display:flex;
+    justify-content:center;
+    padding: 32px 16px;
+  }
+  .device{
+    width:420px;
+    min-height:780px;
+    background: var(--paper);
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    overflow:hidden;
+    position:relative;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+  }
+  .screen{ display:none; min-height:780px; flex-direction:column; }
+  .screen.active{ display:flex; }
+  .topo{
+    position:absolute; top:0; left:0; right:0; height:220px;
+    opacity:0.5; pointer-events:none;
+  }
+
+  /* ---------- MAIN ---------- */
+  .main-hero{
+    position:relative;
+    padding: 44px 28px 28px;
+    background: var(--forest);
+    color: var(--paper);
+    overflow:hidden;
+  }
+  .eyebrow{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #C9D6C1;
+    margin: 0 0 10px;
+  }
+  h1.title{
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1.02;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .tagline{
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: #DDE6D5;
+    margin: 0;
+    max-width: 30ch;
+  }
+  .main-body{ padding: 24px 24px 32px; flex:1; }
+  .section-label{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+  }
+  .room-list{ display:flex; flex-direction:column; gap: 10px; margin-bottom: 28px; }
+  .room-card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    cursor:pointer;
+    text-align:left;
+    width:100%;
+    font-family: var(--font-body);
+    transition: border-color 0.15s ease, transform 0.1s ease;
+  }
+  .room-card:hover{ border-color: var(--clay-deep); }
+  .room-card:active{ transform: scale(0.99); }
+  .room-tag{
+    width: 34px; height:34px; border-radius: 8px;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--font-display); font-weight:600; font-size:15px;
+    flex-shrink:0;
+  }
+  .tag-coastal{ background:#E1ECE6; color:#2B5B45; }
+  .tag-water{ background:#E4EEF5; color:#2C5570; }
+  .tag-energy{ background:#F5EADB; color:#8C6435; }
+  .tag-land{ background:#EFE6D8; color:#6F5230; }
+  .room-info{ flex:1; min-width:0; }
+  .room-name{ font-weight:600; font-size: 14.5px; margin:0 0 2px; }
+  .room-meta{ font-size: 12.5px; color: var(--ink-soft); margin:0; }
+  .room-count{
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft);
+    white-space:nowrap;
+  }
+  .btn{
+    display:block; width:100%;
+    font-family: var(--font-body); font-weight:600; font-size: 14.5px;
+    padding: 14px 18px; border-radius: 10px; border: 1px solid transparent;
+    cursor:pointer; text-align:center;
+  }
+  .btn-primary{ background: var(--forest); color:var(--paper); }
+  .btn-primary:hover{ background: var(--forest-dark); }
+  .btn-secondary{ background:transparent; color:var(--forest); border-color: var(--forest); }
+  .btn-secondary:hover{ background: var(--forest-line); }
+  .btn-ghost{ background:transparent; color: var(--ink-soft); border:none; font-weight:500; text-decoration:underline; padding: 8px; }
+
+  /* ---------- ENTRY ---------- */
+  .entry-header{ padding: 20px 24px 0; }
+  .back-link{
+    font-family: var(--font-mono); font-size:12px; color: var(--ink-soft);
+    background:none; border:none; cursor:pointer; padding:6px 0 18px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .context-card{
+    background: var(--card); border:1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; display:flex; align-items:center; gap:12px; margin-bottom: 28px;
+  }
+  h2.entry-title{
+    font-family: var(--font-display); font-weight:600; font-size: 24px;
+    margin: 0 0 6px;
+  }
+  .entry-sub{ font-size: 13.5px; color: var(--ink-soft); margin: 0 0 28px; }
+  .entry-body{ padding: 0 24px 24px; flex:1; display:flex; flex-direction:column; }
+  label.field-label{
+    font-family: var(--font-mono); font-size: 11px; letter-spacing:0.08em;
+    text-transform:uppercase; color: var(--ink-soft); display:block; margin-bottom:8px;
+  }
+  input.name-input{
+    width:100%; font-family: var(--font-body); font-size: 16px;
+    padding: 13px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); margin-bottom: 24px;
+  }
+  input.name-input:focus{ outline:none; border-color: var(--clay-deep); }
+  .emoji-grid{
+    display:grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 32px;
+  }
+  .emoji-opt{
+    aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); font-size: 20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .emoji-opt.selected{ border-color: var(--forest); background: var(--forest-line); }
+  .entry-footer{ margin-top:auto; }
+
+  /* ---------- STAGE ---------- */
+  .stage-header{
+    padding: 18px 24px 14px; border-bottom: 1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .player-chip{
+    display:flex; align-items:center; gap: 8px;
+    background: var(--card); border:1px solid var(--line); border-radius: 20px;
+    padding: 5px 12px 5px 5px;
+  }
+  .player-chip .avatar{
+    width:24px; height:24px; border-radius:50%; background: var(--forest-line);
+    display:flex; align-items:center; justify-content:center; font-size:13px;
+  }
+  .player-chip span{ font-size: 12.5px; font-weight:500; }
+  .room-pill{
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft);
+    background: var(--paper-deep); padding: 5px 10px; border-radius: 20px;
+  }
+  .stage-body{ padding: 28px 24px; flex:1; }
+  .stage-eyebrow{
+    font-family: var(--font-mono); font-size: 11px; letter-spacing:0.1em;
+    text-transform:uppercase; color: var(--rust); margin: 0 0 10px;
+  }
+  h2.scenario-title{
+    font-family: var(--font-display); font-weight:600; font-size: 26px;
+    line-height:1.15; margin: 0 0 16px;
+  }
+  .scenario-meta{
+    display:flex; gap:8px; margin-bottom: 20px; flex-wrap:wrap;
+  }
+  .meta-tag{
+    font-family: var(--font-mono); font-size: 11px; color: var(--forest);
+    background: var(--forest-line); padding: 5px 10px; border-radius: 6px;
+  }
+  .scenario-brief{
+    background: var(--card); border:1px solid var(--line); border-radius: 12px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  .scenario-brief p{
+    font-size: 14.5px; line-height:1.7; color: var(--ink); margin: 0 0 14px;
+  }
+  .scenario-brief p:last-child{ margin-bottom:0; }
+  .stage-footer{
+    padding: 18px 24px 26px; border-top: 1px solid var(--line);
+  }
+  .footer-note{
+    font-size: 12.5px; color: var(--ink-soft); text-align:center; margin:0 0 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="device">
+
+  <!-- SCREEN 1: MAIN -->
+  <div class="screen active" id="screen-main">
+    <div class="main-hero">
+      <svg class="topo" viewBox="0 0 420 220" preserveAspectRatio="none">
+        <path d="M-20,180 C80,150 140,200 220,160 C300,120 340,170 440,140" stroke="#FFFFFF" stroke-width="1" fill="none" opacity="0.15"/>
+        <path d="M-20,140 C90,110 150,160 230,120 C310,80 350,130 440,100" stroke="#FFFFFF" stroke-width="1" fill="none" opacity="0.12"/>
+        <path d="M-20,100 C100,70 160,120 240,80 C320,40 360,90 440,60" stroke="#FFFFFF" stroke-width="1" fill="none" opacity="0.1"/>
+      </svg>
+      <p class="eyebrow">A workshop for shared decisions</p>
+      <h1 class="title">Commons</h1>
+      <p class="tagline">Step into real trade-offs over land, water, and energy — and see where the group lands.</p>
+    </div>
+    <div class="main-body">
+      <p class="section-label">Open rooms</p>
+      <div class="room-list" id="room-list"></div>
+
+      <button class="btn btn-primary" onclick="startCreate()">Create room</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: NAME + EMOJI ENTRY -->
+  <div class="screen" id="screen-entry">
+    <div class="entry-header">
+      <button class="back-link" onclick="goMain()">&larr; Back</button>
+      <div class="context-card" id="context-card"></div>
+    </div>
+    <div class="entry-body">
+      <h2 class="entry-title">Who's joining?</h2>
+      <p class="entry-sub">This is how the room will see you. No accounts, just a name and a mark.</p>
+
+      <label class="field-label" for="name-input">Your name</label>
+      <input class="name-input" id="name-input" type="text" placeholder="e.g. Priya" maxlength="20">
+
+      <label class="field-label">Pick a mark</label>
+      <div class="emoji-grid" id="emoji-grid"></div>
+
+      <div class="entry-footer">
+        <button class="btn btn-primary" onclick="confirmEntry()">Confirm and enter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: GAME STAGE -->
+  <div class="screen" id="screen-stage">
+    <div class="stage-header">
+      <div class="player-chip">
+        <div class="avatar" id="stage-avatar">🙂</div>
+        <span id="stage-name">Player</span>
+      </div>
+      <div class="room-pill" id="stage-room">Room</div>
+    </div>
+    <div class="stage-body">
+      <p class="stage-eyebrow">Scenario 1 of 1 &middot; mock data</p>
+      <h2 class="scenario-title">The reservoir runs low</h2>
+      <div class="scenario-meta">
+        <span class="meta-tag">Water rights</span>
+        <span class="meta-tag">Drought season</span>
+        <span class="meta-tag">4 stakeholders</span>
+      </div>
+      <div class="scenario-brief">
+        <p>Your town's reservoir has dropped to 30% capacity after two dry winters. The farming co-op upstream holds senior water rights dating back decades. The growing suburb downstream is under its first-ever watering restrictions.</p>
+        <p>A regional agency has offered emergency funding — but only if the town agrees on a single allocation plan by the end of this session. Everyone at this table represents a different stake in what happens next.</p>
+      </div>
+    </div>
+    <div class="stage-footer">
+      <p class="footer-note">Voting and resource tools arrive in the next increment.</p>
+      <button class="btn btn-secondary" onclick="goMain()">Leave room</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const rooms = [
+    { name: "Coastal Rezoning", tag: "coastal", icon: "🌊", topic: "Land use", count: "3 players" },
+    { name: "Water Rights Dispute", tag: "water", icon: "💧", topic: "Water", count: "2 players" },
+    { name: "Community Solar Co-op", tag: "energy", icon: "☀️", topic: "Energy", count: "5 players" },
+    { name: "Farmland Buyout", tag: "land", icon: "🌾", topic: "Land use", count: "1 player" },
+  ];
+
+  const emojiOptions = ["🙂","🦊","🌱","🐢","🪨","🌊","🔥","🦉","🐝","🍃","⛰️","🧭"];
+  let selectedEmoji = null;
+  let entryMode = null; // 'join' or 'create'
+  let selectedRoom = null;
+
+  function renderRooms(){
+    const list = document.getElementById('room-list');
+    list.innerHTML = '';
+    rooms.forEach(r => {
+      const card = document.createElement('button');
+      card.className = 'room-card';
+      card.onclick = () => startJoin(r);
+      card.innerHTML = `
+        <div class="room-tag tag-${r.tag}">${r.icon}</div>
+        <div class="room-info">
+          <p class="room-name">${r.name}</p>
+          <p class="room-meta">${r.topic}</p>
+        </div>
+        <div class="room-count">${r.count}</div>
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  function renderEmojiGrid(){
+    const grid = document.getElementById('emoji-grid');
+    grid.innerHTML = '';
+    emojiOptions.forEach(e => {
+      const btn = document.createElement('button');
+      btn.className = 'emoji-opt';
+      btn.textContent = e;
+      btn.onclick = () => {
+        selectedEmoji = e;
+        document.querySelectorAll('.emoji-opt').forEach(el => el.classList.remove('selected'));
+        btn.classList.add('selected');
+      };
+      grid.appendChild(btn);
+    });
+  }
+
+  function showScreen(id){
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function goMain(){
+    selectedEmoji = null;
+    entryMode = null;
+    selectedRoom = null;
+    document.getElementById('name-input').value = '';
+    showScreen('screen-main');
+  }
+
+  function startJoin(room){
+    entryMode = 'join';
+    selectedRoom = room;
+    const ctx = document.getElementById('context-card');
+    ctx.innerHTML = `
+      <div class="room-tag tag-${room.tag}">${room.icon}</div>
+      <div class="room-info">
+        <p class="room-name">Joining ${room.name}</p>
+        <p class="room-meta">${room.topic} &middot; ${room.count}</p>
+      </div>
+    `;
+    prepEntry();
+  }
+
+  function startCreate(){
+    entryMode = 'create';
+    selectedRoom = null;
+    const ctx = document.getElementById('context-card');
+    ctx.innerHTML = `
+      <div class="room-tag tag-land">＋</div>
+      <div class="room-info">
+        <p class="room-name">Creating a new room</p>
+        <p class="room-meta">Scenario assigned automatically for now</p>
+      </div>
+    `;
+    prepEntry();
+  }
+
+  function prepEntry(){
+    selectedEmoji = null;
+    document.getElementById('name-input').value = '';
+    renderEmojiGrid();
+    showScreen('screen-entry');
+  }
+
+  function confirmEntry(){
+    const name = document.getElementById('name-input').value.trim() || 'Player';
+    const emoji = selectedEmoji || '🙂';
+
+    document.getElementById('stage-avatar').textContent = emoji;
+    document.getElementById('stage-name').textContent = name;
+    document.getElementById('stage-room').textContent = selectedRoom ? selectedRoom.name : 'New room';
+
+    showScreen('screen-stage');
+  }
+
+  renderRooms();
+</script>
+
+</body>
+</html>
