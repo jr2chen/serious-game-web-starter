@@ -6,18 +6,20 @@ import {
   createRoom,
   getCategoryTotals,
   getScenario,
+  getStarterProposal,
   listRooms,
-} from "@/lib/mock/api";
-import {
-  CATEGORIES,
-  EMOJI_OPTIONS,
-  TEAMS,
-  type CategoryTotals,
-  type HiddenRole,
-  type Room,
-  type Scenario,
-  type TeamId,
-} from "@/lib/mock/data";
+} from "@/lib/api/client";
+import type {
+  CategoryId,
+  CategoryTotals,
+  HiddenRole,
+  Room,
+  Scenario,
+  StarterProposal,
+  TeamId,
+} from "@/lib/game/types";
+import { CATEGORIES, EMOJI_OPTIONS, TEAMS } from "@/lib/game/constants";
+import { roleRuleLabel } from "@/lib/game/scoring";
 
 type Screen = "main" | "entry" | "stage";
 
@@ -30,8 +32,21 @@ const TAG_CLASS: Record<Room["tag"], string> = {
   land: "tag-land",
 };
 
-function conditionLabel(condition: HiddenRole["score_condition"]): string {
-  return condition === "positive" ? "ends above 0" : "ends at 0 or below";
+const DELTA_KEYS: CategoryId[] = [
+  "jobs",
+  "housing",
+  "accessibility",
+  "climate",
+  "cost",
+];
+
+function formatDelta(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function formatDiscussion(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
 }
 
 export default function CommonsApp() {
@@ -43,9 +58,11 @@ export default function CommonsApp() {
   const [emoji, setEmoji] = useState<string | null>(null);
   const [team, setTeam] = useState<TeamId | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [starter, setStarter] = useState<StarterProposal | null>(null);
   const [roomLabel, setRoomLabel] = useState("");
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     void listRooms().then(setRooms);
@@ -59,9 +76,11 @@ export default function CommonsApp() {
     setEmoji(null);
     setTeam(null);
     setScenario(null);
+    setStarter(null);
     setRoomLabel("");
     setHiddenRole(null);
     setCategories(null);
+    setLoadError(null);
   }
 
   function startJoin(room: Room) {
@@ -70,6 +89,7 @@ export default function CommonsApp() {
     setName("");
     setEmoji(null);
     setTeam(null);
+    setLoadError(null);
     setScreen("entry");
   }
 
@@ -80,6 +100,7 @@ export default function CommonsApp() {
     setName("");
     setEmoji(null);
     setTeam(null);
+    setLoadError(null);
     setScreen("entry");
   }
 
@@ -89,19 +110,29 @@ export default function CommonsApp() {
     const displayName = name.trim() || "Player";
     const mark = emoji ?? "🙂";
     const room = selectedRoom;
-    const [nextScenario, role, totals] = await Promise.all([
-      getScenario(room?.id),
-      assignHiddenRole(team),
-      getCategoryTotals(),
-    ]);
 
-    setName(displayName);
-    setEmoji(mark);
-    setScenario(nextScenario);
-    setHiddenRole(role);
-    setCategories(totals);
-    setRoomLabel(entryMode === "create" ? "New room" : (room?.name ?? "Room"));
-    setScreen("stage");
+    try {
+      setLoadError(null);
+      const [nextScenario, role, totals] = await Promise.all([
+        getScenario(room?.id),
+        assignHiddenRole(team),
+        getCategoryTotals(),
+      ]);
+      const proposal = await getStarterProposal(nextScenario.scenario_id, team);
+
+      setName(displayName);
+      setEmoji(mark);
+      setScenario(nextScenario);
+      setStarter(proposal);
+      setHiddenRole(role);
+      setCategories(totals);
+      setRoomLabel(entryMode === "create" ? "New room" : (room?.name ?? "Room"));
+      setScreen("stage");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not load game content",
+      );
+    }
   }
 
   const teamInfo = team ? TEAMS[team] : null;
@@ -254,6 +285,8 @@ export default function CommonsApp() {
               ))}
             </div>
 
+            {loadError && <p className="load-error">{loadError}</p>}
+
             <div className="entry-footer">
               <button
                 type="button"
@@ -268,76 +301,112 @@ export default function CommonsApp() {
         </div>
       )}
 
-      {screen === "stage" && scenario && teamInfo && hiddenRole && categories && (
-        <div className="screen active">
-          <div className="stage-header">
-            <div className="player-chip">
-              <div className="avatar">{emoji ?? "🙂"}</div>
-              <span>{name || "Player"}</span>
+      {screen === "stage" &&
+        scenario &&
+        teamInfo &&
+        hiddenRole &&
+        categories &&
+        starter && (
+          <div className="screen active">
+            <div className="stage-header">
+              <div className="player-chip">
+                <div className="avatar">{emoji ?? "🙂"}</div>
+                <span>{name || "Player"}</span>
+              </div>
+              <div className="room-pill">{roomLabel}</div>
             </div>
-            <div className="room-pill">{roomLabel}</div>
-          </div>
-          <div className="stage-body">
-            <div className={`team-badge team-badge-${teamInfo.id}`}>
-              <span className="team-badge-name">{teamInfo.name}</span>
-              <span className="team-badge-goal">
-                Promotes {teamInfo.goalLabel}
-              </span>
-            </div>
-
-            <div className="role-card">
-              <p className="role-eyebrow">Private · hidden role</p>
-              <h3 className="role-name">{hiddenRole.role_name}</h3>
-              <p className="role-desc">{hiddenRole.description}</p>
-              <p className="role-rule">
-                You score 1 point at end of game if{" "}
-                <strong>{hiddenRole.target_category}</strong>{" "}
-                {conditionLabel(hiddenRole.score_condition)}.
-              </p>
-            </div>
-
-            <p className="section-label">City categories</p>
-            <div className="category-strip">
-              {CATEGORIES.map((cat) => (
-                <div key={cat.id} className="category-chip" title={cat.blurb}>
-                  <span className="category-name">{cat.name}</span>
-                  <span className="category-value">
-                    {categories[cat.id] > 0 ? "+" : ""}
-                    {categories[cat.id]}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="category-note">
-              Red score = Jobs + Housing · Blue score = Accessibility + Climate
-              · Cost is shared
-            </p>
-
-            <p className="stage-eyebrow">{scenario.eyebrow}</p>
-            <h2 className="scenario-title">{scenario.title}</h2>
-            <div className="scenario-meta">
-              {scenario.tags.map((tag) => (
-                <span key={tag} className="meta-tag">
-                  {tag}
+            <div className="stage-body">
+              <div className={`team-badge team-badge-${teamInfo.id}`}>
+                <span className="team-badge-name">{teamInfo.name}</span>
+                <span className="team-badge-goal">
+                  Promotes {teamInfo.goalLabel}
                 </span>
-              ))}
+              </div>
+
+              <div className="role-card">
+                <p className="role-eyebrow">Private · hidden role</p>
+                <h3 className="role-name">{hiddenRole.role_name}</h3>
+                <p className="role-desc">{hiddenRole.description}</p>
+                <p className="role-rule">
+                  You score 1 point at end of game if{" "}
+                  {roleRuleLabel(
+                    hiddenRole.target_category,
+                    hiddenRole.comparison,
+                    hiddenRole.threshold,
+                  )}
+                  .
+                </p>
+              </div>
+
+              <p className="section-label">City categories</p>
+              <div className="category-strip">
+                {CATEGORIES.map((cat) => (
+                  <div key={cat.id} className="category-chip" title={cat.blurb}>
+                    <span className="category-name">{cat.name}</span>
+                    <span className="category-value">
+                      {categories[cat.id] > 0 ? "+" : ""}
+                      {categories[cat.id]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="category-note">
+                Red score = Jobs + Housing · Blue score = Accessibility + Climate
+                · Cost is shared
+              </p>
+
+              <p className="stage-eyebrow">
+                Round {scenario.round_order} of 2 · from CSV
+              </p>
+              <h2 className="scenario-title">{scenario.title}</h2>
+              <div className="scenario-meta">
+                <span className="meta-tag">
+                  Discuss {formatDiscussion(scenario.discussion_seconds)}
+                </span>
+              </div>
+              <div className="scenario-brief">
+                <p>
+                  <strong>Problem.</strong> {scenario.problem}
+                </p>
+                <p>
+                  <strong>Team task.</strong> {scenario.team_task}
+                </p>
+              </div>
+
+              <p className="section-label">Your team&apos;s starter proposal</p>
+              <div className="proposal-card">
+                <p className="proposal-text">{starter.proposal_text}</p>
+                <div className="proposal-deltas">
+                  {DELTA_KEYS.map((key) => (
+                    <div key={key} className="proposal-delta">
+                      <span className="category-name">
+                        {CATEGORIES.find((c) => c.id === key)?.name}
+                      </span>
+                      <span className="category-value">
+                        {formatDelta(starter[key])}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="proposal-note">
+                  Read-only for now. Editing and submit arrive in Epic 4.
+                </p>
+              </div>
             </div>
-            <div className="scenario-brief">
-              {scenario.paragraphs.map((paragraph) => (
-                <p key={paragraph.slice(0, 24)}>{paragraph}</p>
-              ))}
+            <div className="stage-footer">
+              <p className="footer-note">
+                Round 2 lives in CSV already; advancing rounds comes later.
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={goMain}
+              >
+                Leave room
+              </button>
             </div>
           </div>
-          <div className="stage-footer">
-            <p className="footer-note">
-              Team proposals and judging arrive in later increments.
-            </p>
-            <button type="button" className="btn btn-secondary" onClick={goMain}>
-              Leave room
-            </button>
-          </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }
