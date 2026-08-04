@@ -62,6 +62,29 @@ function formatAge(createdAtMs: number): string {
   return `${minutes} min ago`;
 }
 
+/** mm:ss for the mock discussion timer. */
+function formatTimer(seconds: number): string {
+  const clamped = Math.max(0, Math.round(seconds));
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+const SCORE_ABBR: Record<CategoryId, string> = {
+  jobs: "Jobs",
+  housing: "Housing",
+  accessibility: "Access",
+  climate: "Climate",
+  cost: "Cost",
+};
+
+/** Which team a category counts toward, for coloring the score chip. */
+function scoreTeamOf(categoryId: CategoryId): TeamId | "shared" {
+  if (TEAMS.red.goalCategories.includes(categoryId)) return "red";
+  if (TEAMS.blue.goalCategories.includes(categoryId)) return "blue";
+  return "shared";
+}
+
 export default function CommonsApp() {
   const [screen, setScreen] = useState<Screen>("main");
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -76,7 +99,7 @@ export default function CommonsApp() {
   const [team, setTeam] = useState<TeamId | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [starter, setStarter] = useState<StarterProposal | null>(null);
-  const [roomLabel, setRoomLabel] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -168,6 +191,15 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom]);
 
+  /** Mock countdown only — not synced across players or persisted. */
+  useEffect(() => {
+    if (screen !== "stage") return;
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => (prev === null || prev <= 0 ? prev : prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [screen]);
+
   function goMain() {
     clearActiveRoom();
     setRejoinCode(null);
@@ -181,7 +213,7 @@ export default function CommonsApp() {
     setTeam(null);
     setScenario(null);
     setStarter(null);
-    setRoomLabel("");
+    setSecondsLeft(null);
     setHiddenRole(null);
     setCategories(null);
     setLoadError(null);
@@ -256,7 +288,7 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(role);
       setCategories(totals);
-      setRoomLabel(`${selectedRoom.code} · ${selectedRoom.themeName}`);
+      setSecondsLeft(nextScenario.discussion_seconds);
       rememberActiveRoom(selectedRoom.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -299,7 +331,7 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(seat.role);
       setCategories(totals);
-      setRoomLabel(`${room.code} · ${room.themeName}`);
+      setSecondsLeft(nextScenario.discussion_seconds);
       rememberActiveRoom(room.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -574,7 +606,7 @@ export default function CommonsApp() {
         starter && (
           <div className="screen active stage-screen">
             <div className="stage-header">
-              <div className="stage-header-left">
+              <div className="stage-header-row">
                 <div className="player-chip">
                   <div className="avatar">{emoji ?? "🙂"}</div>
                   <span>{name || "Player"}</span>
@@ -590,17 +622,93 @@ export default function CommonsApp() {
                     {teamInfo.id === "red" ? "Red" : "Blue"} ·{" "}
                     {hiddenRole.role_name}
                   </span>
+                  <span className="identity-hint" aria-hidden>
+                    {roleOpen ? "Hide" : "Role"}
+                  </span>
                   <span className="identity-chevron" aria-hidden>
                     {roleOpen ? "▴" : "▾"}
                   </span>
                 </button>
               </div>
-              <div className="room-pill">{roomLabel}</div>
+
+              <div className="stage-header-row stage-stats-row">
+                <div
+                  className="mini-scoreboard"
+                  role="group"
+                  aria-label="City totals"
+                >
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      className={`mini-score-chip score-${scoreTeamOf(cat.id)}`}
+                      title={cat.blurb}
+                      aria-expanded={scoreInfoOpen}
+                      aria-controls="scoreboard-tip"
+                      onClick={() => setScoreInfoOpen((open) => !open)}
+                    >
+                      <span className="mini-score-label">
+                        {SCORE_ABBR[cat.id]}
+                      </span>
+                      <span className="mini-score-value">
+                        {categories[cat.id] > 0 ? "+" : ""}
+                        {categories[cat.id]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {scoreInfoOpen && (
+                <p className="scoreboard-tip" id="scoreboard-tip">
+                  Red score = Jobs + Housing. Blue score = Accessibility +
+                  Climate. Cost is shared.
+                </p>
+              )}
+
+              <div className="stage-header-row stage-meta-row">
+                <div
+                  className="timer-chip"
+                  aria-label={`Discussion timer ${formatTimer(secondsLeft ?? scenario.discussion_seconds)}`}
+                >
+                  <span aria-hidden>⏱</span>
+                  <span>
+                    {formatTimer(secondsLeft ?? scenario.discussion_seconds)}
+                  </span>
+                </div>
+                <div className="room-code-chip">
+                  <span aria-hidden>#</span>
+                  <span>{selectedRoom?.code}</span>
+                </div>
+                <button
+                  type="button"
+                  className="players-chip"
+                  onClick={() => setRosterOpen(true)}
+                  aria-label={`Open players list, ${roster.length} in room`}
+                >
+                  <span aria-hidden>👥</span>
+                  <span>
+                    {roster.length}{" "}
+                    {roster.length === 1 ? "player" : "players"}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {roleOpen && (
-              <div className="role-panel" id="role-panel">
-                <p className="role-eyebrow">Private · hidden role</p>
+              <button
+                type="button"
+                className="role-panel"
+                id="role-panel"
+                onClick={() => setRoleOpen(false)}
+                aria-label="Hide hidden role details"
+              >
+                <div className="role-panel-top">
+                  <p className="role-eyebrow">Private · hidden role</p>
+                  <span className="role-hide-hint">
+                    Tap to hide <span aria-hidden>▴</span>
+                  </span>
+                </div>
                 <h3 className="role-name">{hiddenRole.role_name}</h3>
                 <p className="role-desc">{hiddenRole.description}</p>
                 <p className="role-rule">
@@ -615,37 +723,10 @@ export default function CommonsApp() {
                 <p className="role-team-note">
                   {teamInfo.name} promotes {teamInfo.goalLabel}.
                 </p>
-              </div>
+              </button>
             )}
 
             <div className="stage-body">
-              <div className="scoreboard">
-                <p className="scoreboard-bar">
-                  {CATEGORIES.map((cat, index) => (
-                    <span key={cat.id}>
-                      {index > 0 ? " · " : ""}
-                      {cat.name} {categories[cat.id]}
-                    </span>
-                  ))}
-                </p>
-                <button
-                  type="button"
-                  className="scoreboard-info"
-                  aria-expanded={scoreInfoOpen}
-                  aria-controls="scoreboard-tip"
-                  aria-label="How team scoring works"
-                  onClick={() => setScoreInfoOpen((open) => !open)}
-                >
-                  i
-                </button>
-              </div>
-              {scoreInfoOpen && (
-                <p className="scoreboard-tip" id="scoreboard-tip">
-                  Red score = Jobs + Housing. Blue score = Accessibility +
-                  Climate. Cost is shared.
-                </p>
-              )}
-
               <p className="stage-eyebrow">Round {scenario.round_order}</p>
               <h2 className="scenario-title">{scenario.title}</h2>
               <div className="scenario-meta">
@@ -689,16 +770,6 @@ export default function CommonsApp() {
                 Leave room
               </button>
             </div>
-
-            <button
-              type="button"
-              className="roster-bubble"
-              onClick={() => setRosterOpen(true)}
-              aria-label={`Open players list, ${roster.length} in room`}
-            >
-              <span className="roster-bubble-label">Players</span>
-              <span className="roster-bubble-count">{roster.length}</span>
-            </button>
 
             {rosterOpen && (
               <div

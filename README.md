@@ -1,4 +1,4 @@
-# Commons — Stage density (pre–Epic 4)
+# Commons — Stage top bar, 3 rows (pre–Epic 4)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -14,19 +14,20 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 **Epic 0–2** — UI shell, teams/roles, CSV content  
 **Epic 3** — Firebase rooms, roster, rejoin  
-**This slice** — denser stage layout (collapsed role, compact scoreboard, sticky footer)  
+**This slice** — the sticky stage header is now three simple rows  
 **Next** — Epic 4 (editable team proposals)
 
 ---
 
 ## User flow (this slice)
 
-Same join/create/rejoin flow. On stage:
+Same join/create/rejoin flow. The stage header is three pinned rows:
 
-- Header shows player chip + **Red · Role ▾** badge; tap to expand the full private role card
-- City totals are one mono line (`Jobs 0 · Housing 0 · …`) with an **i** tip for scoring rules
-- **Leave room** stays in a footer pinned to the bottom of the stage frame
-- Players control still opens the live roster
+1. **Name · Role** — player chip + **Red · Role ▾** badge (tap to expand/collapse the private role card)
+2. **City scores** — horizontal chips (`Jobs 0`, `Housing 0`, …) tinted **red** (Jobs/Housing) or **blue** (Accessibility/Climate); Cost stays neutral since it's shared. Tap **any** chip to reveal the scoring-rule explanation
+3. **Timer · Room code · Players** — a mock **⏱ mm:ss** discussion countdown, the room code, and a **players** chip that opens the live roster
+
+The timer is client-only: it resets to the full time on join/rejoin, is not synced across players, and isn't persisted — a placeholder until real facilitator timing lands later.
 
 ---
 
