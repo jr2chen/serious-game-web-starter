@@ -1,4 +1,4 @@
-# Commons — Epic 3b (Create / join rooms)
+# Commons — Epic 3c (Live player roster)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -12,12 +12,10 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 ## How we got here
 
-
-**Epic 0** — join/create → name + emoji → stage shell  
-**Epic 1** — pick Red/Blue team; show hidden role + five city categories  
-**Epic 2** — load Round 1 scenario, roles, and starter proposals from CSV   
-**Epic 3a** — Firebase SDK + env template + setup docs  
-**Epic 3b (current)** — real Firestore rooms: create with theme, list last hour, join
+**Epic 0–2** — UI shell, teams/roles, CSV content  
+**Epic 3a** — Firebase wiring + setup docs  
+**Epic 3b** — create/join rooms (last hour list)  
+**Epic 3c (current)** — live player roster + private hidden-role secrets
 
 ---
 
@@ -25,32 +23,29 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 ```
 Main (rooms from last hour)
-  ├─ Join room ──► Name + emoji + team ──► Stage
-  └─ Create room ──► Pick theme ──► Name + emoji + team ──► Stage
+  ├─ Join room ──► Name + emoji + team ──► Stage (+ live roster)
+  └─ Create room ──► Pick theme ──► Name + emoji + team ──► Stage (+ live roster)
 ```
 
-- Room list comes from Firestore (created in the **last hour** only) — no demo rooms
-- Create: pick **Municipal Commons** (only theme for now) → get a short code
-- Enter: name, mark, team → CSV scenario + starter proposal as before
+On stage:
+
+- **Players bubble** on the stage shows Red/Blue counts; tap it for the full live roster
+- Your **hidden role** stays private (stored under `secrets/{yourUid}`)
+- Scenario + starter proposal still come from CSV
 
 ---
 
-## Firebase setup (required for rooms)
+## Firebase setup (required)
 
-1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md) (checklist) — project, **Anonymous Auth**, **Firestore**
-2. Copy env template and paste web keys:
-
-```bash
-cp .env.local.example .env.local
-```
-
-3. Restart `npm run dev`
+1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md)
+2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) (players + secrets paths are new)
+3. `cp .env.local.example .env.local` and paste web keys, then `npm run dev`
 
 Without `.env.local`, the main screen shows a configuration error instead of rooms.
 
 If Firestore is in **production mode**, publish rules from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) or create/join will be denied.
 
-Room helpers: [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts), [`lib/firebase/auth.ts`](lib/firebase/auth.ts).
+Room helpers: [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts), [`lib/firebase/players.ts`](lib/firebase/players.ts), [`lib/firebase/auth.ts`](lib/firebase/auth.ts).
 
 ---
 
@@ -147,6 +142,7 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | [`lib/firebase/client.ts`](lib/firebase/client.ts) | Firebase app / Auth / Firestore getters |
 | [`lib/firebase/auth.ts`](lib/firebase/auth.ts) | Anonymous sign-in helper |
 | [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts) | Create room, list last hour, join count |
+| [`lib/firebase/players.ts`](lib/firebase/players.ts) | Join as player, live roster subscribe, private role secret |
 | [`lib/game/themes.ts`](lib/game/themes.ts) | Workshop themes (Municipal only for now) |
 | [`lib/content/`](lib/content/) | CSV parse + load |
 | [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
@@ -171,15 +167,14 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Explicitly not in this slice
 
-- Live player roster UI  
-- Locked-down production Firestore rules in-repo  
+- Editable team proposals (Epic 4)  
 - Multiple themes  
-- Editing / submitting proposals  
 - Advancing to Round 2 in the UI  
+- Facilitator judging  
 - Accounts or saved games  
 
 ---
 
 ## Suggested next increment
 
-**Epic 3c:** live roster in the room (who joined) while keeping hidden roles private.
+**Epic 4:** editable private team proposals (shared text + −2…+2 deltas + submit).

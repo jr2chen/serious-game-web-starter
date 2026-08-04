@@ -2,6 +2,7 @@ import type {
   CategoryTotals,
   HiddenRole,
   Room,
+  RoomPlayer,
   Scenario,
   StarterProposal,
   TeamId,
@@ -11,8 +12,12 @@ import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
 import {
   createRoom as createFirestoreRoom,
   listRecentRooms,
-  recordPlayerJoined,
 } from "@/lib/firebase/rooms";
+import {
+  joinRoomAsPlayer,
+  subscribeToRoomPlayers,
+} from "@/lib/firebase/players";
+import type { Unsubscribe } from "firebase/firestore";
 
 /** Browser client for game content and rooms. */
 
@@ -33,8 +38,22 @@ export async function createRoom(themeId: ThemeId): Promise<Room> {
   return createFirestoreRoom(themeId);
 }
 
-export async function notePlayerJoined(roomCode: string): Promise<void> {
-  await recordPlayerJoined(roomCode);
+export async function enterRoom(input: {
+  roomCode: string;
+  displayName: string;
+  emoji: string;
+  team: TeamId;
+  role: HiddenRole;
+}): Promise<void> {
+  await joinRoomAsPlayer(input);
+}
+
+export async function watchRoomPlayers(
+  roomCode: string,
+  onChange: (players: RoomPlayer[]) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToRoomPlayers(roomCode, onChange, onError);
 }
 
 export async function getScenario(_roomId?: string): Promise<Scenario> {

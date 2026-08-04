@@ -2,8 +2,8 @@ import {
   Timestamp,
   collection,
   doc,
+  getCountFromServer,
   getDoc,
-  increment,
   orderBy,
   query,
   serverTimestamp,
@@ -123,11 +123,14 @@ export async function createRoom(themeId: ThemeId): Promise<Room> {
   throw new Error("Could not allocate a free room code. Try again.");
 }
 
-/** Bump the room's player count when someone finishes joining. */
-export async function recordPlayerJoined(roomCode: string): Promise<void> {
+/** Set room.playerCount from the actual players subcollection size. */
+export async function syncRoomPlayerCount(roomCode: string): Promise<number> {
   await ensureAnonymousUser();
   const db = getFirebaseDb();
-  await updateDoc(doc(db, ROOMS, roomCode), {
-    playerCount: increment(1),
-  });
+  const countSnap = await getCountFromServer(
+    collection(db, ROOMS, roomCode, "players"),
+  );
+  const playerCount = countSnap.data().count;
+  await updateDoc(doc(db, ROOMS, roomCode), { playerCount });
+  return playerCount;
 }

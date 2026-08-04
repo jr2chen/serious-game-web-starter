@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   assignHiddenRole,
   createRoom,
+  enterRoom,
   getCategoryTotals,
   getScenario,
   getStarterProposal,
   listRooms,
-  notePlayerJoined,
+  watchRoomPlayers,
 } from "@/lib/api/client";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import type {
@@ -16,6 +17,7 @@ import type {
   CategoryTotals,
   HiddenRole,
   Room,
+  RoomPlayer,
   Scenario,
   StarterProposal,
   TeamId,
@@ -71,6 +73,8 @@ export default function CommonsApp() {
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [roster, setRoster] = useState<RoomPlayer[]>([]);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   const refreshRooms = useCallback(async () => {
     if (!isFirebaseConfigured()) {
@@ -99,6 +103,37 @@ export default function CommonsApp() {
     void refreshRooms();
   }, [refreshRooms]);
 
+  useEffect(() => {
+    if (screen !== "stage" || !selectedRoom) {
+      setRoster([]);
+      return;
+    }
+
+    let active = true;
+    let unsub: (() => void) | undefined;
+
+    void watchRoomPlayers(
+      selectedRoom.code,
+      (players) => {
+        if (active) setRoster(players);
+      },
+      (error) => {
+        if (active) setLoadError(error.message);
+      },
+    ).then((unsubscribe) => {
+      if (!active) {
+        unsubscribe();
+        return;
+      }
+      unsub = unsubscribe;
+    });
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [screen, selectedRoom]);
+
   function goMain() {
     setScreen("main");
     setEntryMode(null);
@@ -114,6 +149,8 @@ export default function CommonsApp() {
     setHiddenRole(null);
     setCategories(null);
     setLoadError(null);
+    setRoster([]);
+    setRosterOpen(false);
     void refreshRooms();
   }
 
@@ -167,7 +204,13 @@ export default function CommonsApp() {
         getCategoryTotals(),
       ]);
       const proposal = await getStarterProposal(nextScenario.scenario_id, team);
-      await notePlayerJoined(selectedRoom.code);
+      await enterRoom({
+        roomCode: selectedRoom.code,
+        displayName,
+        emoji: mark,
+        team,
+        role,
+      });
 
       setName(displayName);
       setEmoji(mark);
@@ -185,6 +228,8 @@ export default function CommonsApp() {
   }
 
   const teamInfo = team ? TEAMS[team] : null;
+  const redCount = roster.filter((p) => p.team === "red").length;
+  const blueCount = roster.filter((p) => p.team === "blue").length;
 
   return (
     <div className="device">
@@ -521,6 +566,71 @@ export default function CommonsApp() {
                 Leave room
               </button>
             </div>
+
+            <button
+              type="button"
+              className="roster-bubble"
+              onClick={() => setRosterOpen(true)}
+              aria-label="Open player roster"
+            >
+              <span className="roster-bubble-line roster-bubble-red">
+                {redCount} Red
+              </span>
+              <span className="roster-bubble-line roster-bubble-blue">
+                {blueCount} Blue
+              </span>
+            </button>
+
+            {rosterOpen && (
+              <div
+                className="roster-modal-backdrop"
+                onClick={() => setRosterOpen(false)}
+                role="presentation"
+              >
+                <div
+                  className="roster-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="roster-modal-title"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="roster-modal-header">
+                    <h2 id="roster-modal-title" className="roster-modal-title">
+                      Players · {roster.length}
+                    </h2>
+                    <button
+                      type="button"
+                      className="roster-modal-close"
+                      onClick={() => setRosterOpen(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <p className="roster-modal-summary">
+                    <span className="roster-bubble-red">{redCount} Red</span>
+                    {" · "}
+                    <span className="roster-bubble-blue">{blueCount} Blue</span>
+                  </p>
+                  <div className="roster-list">
+                    {roster.length === 0 && (
+                      <p className="room-empty">Waiting for players…</p>
+                    )}
+                    {roster.map((player) => (
+                      <div
+                        key={player.id}
+                        className={`roster-row roster-${player.team}`}
+                      >
+                        <span className="roster-emoji">{player.emoji}</span>
+                        <span className="roster-name">{player.displayName}</span>
+                        <span className="roster-team">
+                          {TEAMS[player.team].name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
     </div>

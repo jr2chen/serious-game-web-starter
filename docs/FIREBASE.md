@@ -121,7 +121,6 @@ Still no service-account JSON is required for this client-only architecture.
 - [x] Listing rooms from the last hour
 - [x] Joining a listed room (name / team / mark)
 - [x] Anonymous `signInAnonymously` when creating or listing rooms
-- [ ] Publish production Firestore rules ([`FIRESTORE_RULES.md`](FIRESTORE_RULES.md))
-- [ ] Live player roster UI
-- [ ] Security rules file kept in sync as player/role subcollections appear
+- [x] Publishing production Firestore rules for rooms / players / secrets
+- [x] Live player roster UI
 - [ ] More than one workshop theme

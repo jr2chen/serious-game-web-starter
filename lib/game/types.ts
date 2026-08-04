@@ -67,6 +67,14 @@ export type Room = {
   playerCount: number;
 };
 
+export type RoomPlayer = {
+  id: string;
+  displayName: string;
+  emoji: string;
+  team: TeamId;
+  joinedAtMs: number;
+};
+
 export type ThemeId = "municipal";
 
 export type GameTheme = {
