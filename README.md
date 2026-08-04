@@ -1,10 +1,11 @@
-# Commons — Epic 2
+# Commons — Epic 3 (Firebase setup)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
 **Working agreement:** keep increments extremely small and code changes minimal. After each change, keep this README in sync with the current epic, and end with a suggested commit message (see [`.cursor/skills/step-readme-and-commit/SKILL.md`](.cursor/skills/step-readme-and-commit/SKILL.md)).
 
-Living product plan (epics + locked V1 scoring): [`docs/PLAN.md`](docs/PLAN.md).
+Living product plan: [`docs/PLAN.md`](docs/PLAN.md).  
+Firebase project setup: [`docs/FIREBASE.md`](docs/FIREBASE.md).
 
 ---
 
@@ -12,26 +13,37 @@ Living product plan (epics + locked V1 scoring): [`docs/PLAN.md`](docs/PLAN.md).
 
 **Epic 0** — join/create → name + emoji → stage shell  
 **Epic 1** — pick Red/Blue team; show hidden role + five city categories  
-**Epic 2 (current)** — load Round 1 scenario, roles, and starter proposals from CSV
+**Epic 2** — load Round 1 scenario, roles, and starter proposals from CSV  
+**Epic 3 (this slice)** — install Firebase SDK, env template, and setup docs (**no room database usage yet**)
 
-Still no Firebase, no editable proposals, no advancing to Round 2 in the UI.
+Gameplay screens still use CSV + local demo rooms. Firestore create/join comes next.
 
 ---
 
-## User flow (this epic)
+## User flow (unchanged this slice)
 
 ```
 Main → Join/Create → Name + emoji + team → Stage
 ```
 
-On stage:
+Same as Epic 2. Firebase is wired in code but not called from the UI yet.
 
-- Team badge + private hidden role (from `roles.csv`)
-- Five categories at 0
-- **Round 1** from `scenarios.csv` (Downtown Redevelopment)
-- Your team’s **starter proposal** (read-only) from `starter_proposals.csv`
+---
 
-Round 2 (Expanding Transportation Access) is already in the CSV files for later.
+## Firebase setup (start here for Epic 3)
+
+1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md) (checklist you can tick off) to create a project, enable **Anonymous Auth**, and create **Firestore**
+2. Copy the env template:
+
+```bash
+cp .env.local.example .env.local
+```
+
+3. Paste your web app config into `.env.local` (six `NEXT_PUBLIC_FIREBASE_*` values)
+4. Restart `npm run dev`
+
+Template shape: [`.env.local.example`](.env.local.example).  
+Client helpers: [`lib/firebase/client.ts`](lib/firebase/client.ts).
 
 ---
 
@@ -121,14 +133,13 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | Path | Role |
 | --- | --- |
 | [`docs/PLAN.md`](docs/PLAN.md) | Epics + locked V1 scoring |
-| [`lib/content/parseCsv.ts`](lib/content/parseCsv.ts) | Small CSV parser |
-| [`lib/content/load.ts`](lib/content/load.ts) | Load + validate content files |
-| [`lib/game/types.ts`](lib/game/types.ts) | Shared game types |
-| [`lib/game/constants.ts`](lib/game/constants.ts) | Teams, categories, demo room list |
+| [`docs/FIREBASE.md`](docs/FIREBASE.md) | Firebase / Firestore / Anonymous Auth setup |
+| [`.env.local.example`](.env.local.example) | Env var shape for the web SDK |
+| [`lib/firebase/client.ts`](lib/firebase/client.ts) | Firebase app / Auth / Firestore getters |
+| [`lib/content/`](lib/content/) | CSV parse + load |
+| [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
-| [`app/api/content/*/route.ts`](app/api/content/scenario/route.ts) | Content API endpoints |
 | [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Screens |
-| [`docs/screenshots/epic1/`](docs/screenshots/epic1/) | Epic 1 screenshots |
 
 ---
 
@@ -136,23 +147,27 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 
 ```bash
 npm install
+cp .env.local.example .env.local   # then paste Firebase web keys
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The game UI still works without Firebase configured; room sync will require `.env.local` in the next slice.
+
 ---
 
-## Explicitly not in this epic
+## Explicitly not in this slice
 
-- Editing / submitting proposals (Epic 4)  
+- Creating or joining real Firestore rooms  
+- Anonymous sign-in from the UI  
+- Live player roster  
+- Editing / submitting proposals  
 - Advancing to Round 2 in the UI  
-- Real multiplayer / Firebase  
-- Facilitator judging  
 - Accounts or saved games  
 
 ---
 
 ## Suggested next increment
 
-**Epic 3 (tiny slice):** real create/join room codes with a live roster — CSV content loading stays as-is.
+**Epic 3 next:** anonymous sign-in + create/join room with a short code and live roster in Firestore.

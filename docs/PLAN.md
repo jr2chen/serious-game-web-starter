@@ -123,7 +123,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 2 — CSV content (current)
+## Epic 2 — CSV content (done)
 
 **Goal:** Workshop content lives in editable CSV files, not React components.
 
@@ -147,7 +147,20 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ## Epic 3 — Real rooms
 
-Create/join with short codes; live roster; private roles; Firebase + anonymous auth.
+### Slice A — Firebase wiring (current)
+
+**Goal:** Project can connect to Firebase; docs explain setup. No gameplay DB usage yet.
+
+**Stories:**
+- As a developer, I can copy `.env.local.example` and fill Firebase web keys
+- As a workshop host, I can follow [`docs/FIREBASE.md`](FIREBASE.md) to enable Anonymous Auth and Firestore
+- As a developer, I have `getFirebaseAuth` / `getFirebaseDb` helpers ready for the next slice
+
+**Done when:** `firebase` is installed, env template is committed, setup docs exist, and the app still runs without calling Firestore from the UI.
+
+### Slice B — Create / join / roster (next)
+
+Create/join with short codes; live roster; private roles; anonymous auth from the UI.
 
 ---
 
@@ -178,13 +191,14 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 ## Suggested tiny build order
 
 1. Epic 1 — team pick + role + five categories (done)
-2. **Epic 2** — CSV scenarios / roles / starter proposals (this slice)
-3. Epic 3a — create/join + roster
-4. Epic 3b — role privacy across devices
-5. Epic 4 — editable private team proposals
-6. Epic 5 — reveal + facilitator apply deltas
-7. Epic 6 — derived scores + next/end
-8. Epic 7 — polish
+2. Epic 2 — CSV scenarios / roles / starter proposals (done)
+3. **Epic 3a** — Firebase env + client wiring (this slice)
+4. Epic 3b — create/join + roster
+5. Epic 3c — role privacy across devices
+6. Epic 4 — editable private team proposals
+7. Epic 5 — reveal + facilitator apply deltas
+8. Epic 6 — derived scores + next/end
+9. Epic 7 — polish
 
 ---
 
