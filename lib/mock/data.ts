@@ -14,6 +14,130 @@ export type Scenario = {
   paragraphs: string[];
 };
 
+export type TeamId = "red" | "blue";
+
+export type CategoryId =
+  | "jobs"
+  | "housing"
+  | "accessibility"
+  | "climate"
+  | "cost";
+
+export type ScoreCondition = "positive" | "non_positive";
+
+export type Team = {
+  id: TeamId;
+  name: string;
+  goalCategories: CategoryId[];
+  goalLabel: string;
+};
+
+export type Category = {
+  id: CategoryId;
+  name: string;
+  blurb: string;
+};
+
+export type HiddenRole = {
+  role_id: string;
+  role_name: string;
+  description: string;
+  target_category: CategoryId;
+  score_condition: ScoreCondition;
+};
+
+export type CategoryTotals = Record<CategoryId, number>;
+
+export const TEAMS: Record<TeamId, Team> = {
+  red: {
+    id: "red",
+    name: "Red Team",
+    goalCategories: ["jobs", "housing"],
+    goalLabel: "Jobs and Housing",
+  },
+  blue: {
+    id: "blue",
+    name: "Blue Team",
+    goalCategories: ["accessibility", "climate"],
+    goalLabel: "Accessibility and Climate",
+  },
+};
+
+export const CATEGORIES: Category[] = [
+  {
+    id: "jobs",
+    name: "Jobs",
+    blurb: "Employment, apprenticeships, economic activity",
+  },
+  {
+    id: "housing",
+    name: "Housing",
+    blurb: "Supply, affordability, displacement",
+  },
+  {
+    id: "accessibility",
+    name: "Accessibility",
+    blurb: "Access for disabled, older, and underserved residents",
+  },
+  {
+    id: "climate",
+    name: "Climate",
+    blurb: "Emissions, green space, climate resilience",
+  },
+  {
+    id: "cost",
+    name: "Cost",
+    blurb: "Cost to the city (+ costs more, − saves money)",
+  },
+];
+
+export const INITIAL_CATEGORY_TOTALS: CategoryTotals = {
+  jobs: 0,
+  housing: 0,
+  accessibility: 0,
+  climate: 0,
+  cost: 0,
+};
+
+/** Locked V1 hidden roles — later loaded from roles.csv */
+export const MOCK_ROLES: HiddenRole[] = [
+  {
+    role_id: "labour",
+    role_name: "Labour Representative",
+    description: "You want the city to create more jobs.",
+    target_category: "jobs",
+    score_condition: "positive",
+  },
+  {
+    role_id: "housing",
+    role_name: "Housing Advocate",
+    description: "You want the city to improve housing supply and affordability.",
+    target_category: "housing",
+    score_condition: "positive",
+  },
+  {
+    role_id: "accessibility",
+    role_name: "Accessibility Advocate",
+    description: "You want the city to become more accessible.",
+    target_category: "accessibility",
+    score_condition: "positive",
+  },
+  {
+    role_id: "environment",
+    role_name: "Environmental Advocate",
+    description: "You want the city to improve its climate outcomes.",
+    target_category: "climate",
+    score_condition: "positive",
+  },
+  {
+    role_id: "fiscal",
+    role_name: "Fiscal Watchdog",
+    description: "You want the city to avoid increasing costs.",
+    target_category: "cost",
+    score_condition: "non_positive",
+  },
+];
+
 export const MOCK_ROOMS: Room[] = [
   {
     id: "coastal-rezoning",

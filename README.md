@@ -1,44 +1,41 @@
-# Commons — Step 1
+# Commons — Epic 1
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and a mock data layer you can later swap for a real backend.
 
-**Working agreement:** keep increments extremely small and code changes minimal. After each change, keep this README in sync with the current step, and end with a suggested commit message (see [`.cursor/skills/step-readme-and-commit/SKILL.md`](.cursor/skills/step-readme-and-commit/SKILL.md)).
+**Working agreement:** keep increments extremely small and code changes minimal. After each change, keep this README in sync with the current epic, and end with a suggested commit message (see [`.cursor/skills/step-readme-and-commit/SKILL.md`](.cursor/skills/step-readme-and-commit/SKILL.md)).
+
+Living product plan (epics + locked V1 scoring): [`docs/PLAN.md`](docs/PLAN.md).
 
 ---
 
 ## How we got here
 
-We started from a full one-day MVP backlog (rooms, voting, consequences, facilitator + player roles). That was too much for a first cut.
+**Epic 0** shipped a single-player mock flow: main → name + emoji → one scenario on stage (see [`examples/step1-claude-commons-prototype.html`](examples/step1-claude-commons-prototype.html)).
 
-We stripped it down:
+**Epic 1 (current)** adds the Avalon-like identity layer, still mock-only:
 
-1. **One role only** — everyone is a player. No facilitator path yet.
-2. **Three screens only** — main → name + emoji → game stage.
-3. **Mock data** — no Firebase, no live multiplayer yet.
-4. **One scenario** — enough to show the stage; create-room can grow later.
+1. On join, pick a **visible team** (Red or Blue) as well as name + mark (team sits above the emoji grid)
+2. Stage shows **team badge**, **private hidden role**, and **five city categories** at 0
+3. Scoring rules are locked in [`docs/PLAN.md`](docs/PLAN.md) (team scores from categories; roles score at end of game later)
 
-Before coding, we locked the UX in a static HTML prototype, then ported that look and flow into the Next.js app.
-
-| Artifact | What it is |
-| --- | --- |
-| [`examples/step1-claude-commons-prototype.html`](examples/step1-claude-commons-prototype.html) | Visual / UX guide for this step (open in a browser) |
-| This app (`npm run dev`) | Same flow, built in Next.js with a mock API |
+Still no Firebase, proposals, or judging UI.
 
 ---
 
-## User flow (this step)
+## User flow (this epic)
 
 ```
 Main screen
-  ├─ Join room (mock list) ──► Name + emoji ──► Game stage (1 scenario)
-  └─ Create room ────────────► Name + emoji ──► Game stage (1 scenario)
+  ├─ Join room (mock list) ──► Name + emoji + team ──► Stage
+  └─ Create room ────────────► Name + emoji + team ──► Stage
 ```
 
-1. **Main** — title “Commons”, open rooms list, Create room button  
-2. **Entry** — pick a display name and emoji mark  
-3. **Stage** — land immediately in the game; see one mock scenario  
+On stage you see:
 
-That’s the whole product surface for Step 1.
+- Your team (Red → Jobs & Housing, Blue → Accessibility & Climate)
+- Your private hidden role (mock-assigned from the five locked roles)
+- Five categories: Jobs, Housing, Accessibility, Climate, Cost (all 0)
+- The same one mock scenario as Epic 0
 
 ---
 
@@ -46,14 +43,12 @@ That’s the whole product surface for Step 1.
 
 | Path | Role |
 | --- | --- |
-| [`lib/mock/data.ts`](lib/mock/data.ts) | Hard-coded rooms, one scenario, emoji options |
-| [`lib/mock/api.ts`](lib/mock/api.ts) | Mock API: `listRooms`, `getScenario`, `createRoom` |
-| [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | The three screens |
-| [`app/page.tsx`](app/page.tsx) | Renders the app |
-| [`app/globals.css`](app/globals.css) | Styles matched to the prototype |
-| [`.cursor/skills/step-readme-and-commit/SKILL.md`](.cursor/skills/step-readme-and-commit/SKILL.md) | Agent habit: tiny increments, update README, suggest a commit |
-
-Screens talk to the mock API, not to Firebase. Later you can replace `lib/mock/api.ts` without rewriting the UI.
+| [`docs/PLAN.md`](docs/PLAN.md) | Epics + locked V1 scoring rules |
+| [`lib/mock/data.ts`](lib/mock/data.ts) | Rooms, scenario, teams, categories, roles |
+| [`lib/mock/api.ts`](lib/mock/api.ts) | Mock API including `assignHiddenRole` |
+| [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Main / entry / stage screens |
+| [`app/globals.css`](app/globals.css) | Prototype styles + team/role/category UI |
+| [`examples/step1-claude-commons-prototype.html`](examples/step1-claude-commons-prototype.html) | Epic 0 visual guide |
 
 ---
 
@@ -66,27 +61,19 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-To review the original visual guide without running the app, open `examples/step1-claude-commons-prototype.html` in a browser.
-
 ---
 
-## Explicitly not in this step
+## Explicitly not in this epic
 
-- Facilitator vs player split  
-- Submitting decisions or voting  
-- Resources / consequences  
-- Real-time sync or Firebase  
-- Multiple scenarios in create-room  
+- Real multiplayer / Firebase  
+- CSV loading  
+- Team proposal drafting  
+- Facilitator judging (−2…+2)  
+- End-of-game hidden-role scoring UI  
 - Accounts or saved games  
 
 ---
 
 ## Suggested next increment
 
-Keep it small. A natural follow-on:
-
-- Let players **submit one short decision** on the stage screen  
-- Still mock-backed (in-memory or mock API only)  
-- Still no voting or resources  
-
-Document that as Step 2 when you build it.
+**Epic 2:** load scenarios and roles from CSV so editors can change content without touching React components. Still no Firebase.
