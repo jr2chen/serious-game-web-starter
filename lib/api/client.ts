@@ -2,13 +2,27 @@ import type {
   CategoryTotals,
   HiddenRole,
   Room,
+  RoomPlayer,
   Scenario,
   StarterProposal,
   TeamId,
+  ThemeId,
 } from "@/lib/game/types";
-import { DEMO_ROOMS, INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
+import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
+import {
+  createRoom as createFirestoreRoom,
+  getRoom as getFirestoreRoom,
+  listRecentRooms,
+} from "@/lib/firebase/rooms";
+import {
+  getMySeatInRoom,
+  joinRoomAsPlayer,
+  subscribeToRoomPlayers,
+  type PlayerSeat,
+} from "@/lib/firebase/players";
+import type { Unsubscribe } from "firebase/firestore";
 
-/** Browser client for game content and room helpers. */
+/** Browser client for game content and rooms. */
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -20,7 +34,39 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 export async function listRooms(): Promise<Room[]> {
-  return DEMO_ROOMS;
+  return listRecentRooms();
+}
+
+export async function getRoom(roomCode: string): Promise<Room | null> {
+  return getFirestoreRoom(roomCode);
+}
+
+export async function createRoom(themeId: ThemeId): Promise<Room> {
+  return createFirestoreRoom(themeId);
+}
+
+export async function enterRoom(input: {
+  roomCode: string;
+  displayName: string;
+  emoji: string;
+  team: TeamId;
+  role: HiddenRole;
+}): Promise<void> {
+  await joinRoomAsPlayer(input);
+}
+
+export async function loadMySeat(
+  roomCode: string,
+): Promise<PlayerSeat | null> {
+  return getMySeatInRoom(roomCode);
+}
+
+export async function watchRoomPlayers(
+  roomCode: string,
+  onChange: (players: RoomPlayer[]) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToRoomPlayers(roomCode, onChange, onError);
 }
 
 export async function getScenario(_roomId?: string): Promise<Scenario> {
@@ -33,17 +79,6 @@ export async function getStarterProposal(
 ): Promise<StarterProposal> {
   const params = new URLSearchParams({ scenario_id: scenarioId, team });
   return getJson<StarterProposal>(`/api/content/starter-proposal?${params}`);
-}
-
-export async function createRoom(): Promise<Room> {
-  return {
-    id: `new-${Date.now()}`,
-    name: "New room",
-    tag: "land",
-    icon: "＋",
-    topic: "Assigned automatically",
-    playerCount: 1,
-  };
 }
 
 export async function getCategoryTotals(): Promise<CategoryTotals> {

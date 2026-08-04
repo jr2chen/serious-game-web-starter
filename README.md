@@ -1,37 +1,55 @@
-# Commons — Epic 2
+# Commons — Epic 3d (Rejoin after refresh)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
 **Working agreement:** keep increments extremely small and code changes minimal. After each change, keep this README in sync with the current epic, and end with a suggested commit message (see [`.cursor/skills/step-readme-and-commit/SKILL.md`](.cursor/skills/step-readme-and-commit/SKILL.md)).
 
-Living product plan (epics + locked V1 scoring): [`docs/PLAN.md`](docs/PLAN.md).
+Living product plan: [`docs/PLAN.md`](docs/PLAN.md).  
+Firebase project setup: [`docs/FIREBASE.md`](docs/FIREBASE.md).  
+Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md).
 
 ---
 
 ## How we got here
 
-**Epic 0** — join/create → name + emoji → stage shell  
-**Epic 1** — pick Red/Blue team; show hidden role + five city categories  
-**Epic 2 (current)** — load Round 1 scenario, roles, and starter proposals from CSV
-
-Still no Firebase, no editable proposals, no advancing to Round 2 in the UI.
+**Epic 0–2** — UI shell, teams/roles, CSV content  
+**Epic 3a** — Firebase wiring + setup docs  
+**Epic 3b** — create/join rooms (last hour list)  
+**Epic 3c** — live player roster + private hidden-role secrets  
+**Epic 3d (current)** — rejoin button after refresh if you still have a seat
 
 ---
 
-## User flow (this epic)
+## User flow (this slice)
 
 ```
-Main → Join/Create → Name + emoji + team → Stage
+Main (rooms from last hour)
+  ├─ [Rejoin CODE] if you refreshed while still in a room
+  ├─ Join room ──► Name + emoji + team ──► Stage (+ live roster)
+  └─ Create room ──► Pick theme ──► Name + emoji + team ──► Stage (+ live roster)
 ```
 
 On stage:
 
-- Team badge + private hidden role (from `roles.csv`)
-- Five categories at 0
-- **Round 1** from `scenarios.csv` (Downtown Redevelopment)
-- Your team’s **starter proposal** (read-only) from `starter_proposals.csv`
+- **Players bubble** shows Red/Blue counts; tap it for the full live roster
+- Your **hidden role** stays private (`secrets/{yourUid}`)
+- Refreshing the page returns you to Main with a **Rejoin** button (same name, team, role) — it does **not** auto-drop you onto stage
+- **Leave room** clears the rejoin offer for this browser tab
 
-Round 2 (Expanding Transportation Access) is already in the CSV files for later.
+---
+
+## Firebase setup (required)
+
+1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md)
+2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) (players + secrets paths)
+3. `cp .env.local.example .env.local` and paste web keys, then `npm run dev`
+
+Without `.env.local`, the main screen shows a configuration error instead of rooms.
+
+If Firestore is in **production mode**, publish rules from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) or create/join will be denied.
+
+Room helpers: [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts), [`lib/firebase/players.ts`](lib/firebase/players.ts), [`lib/firebase/auth.ts`](lib/firebase/auth.ts).  
+Session hint: [`lib/game/session.ts`](lib/game/session.ts) (tab `sessionStorage` for the active room code).
 
 ---
 
@@ -121,14 +139,20 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | Path | Role |
 | --- | --- |
 | [`docs/PLAN.md`](docs/PLAN.md) | Epics + locked V1 scoring |
-| [`lib/content/parseCsv.ts`](lib/content/parseCsv.ts) | Small CSV parser |
-| [`lib/content/load.ts`](lib/content/load.ts) | Load + validate content files |
-| [`lib/game/types.ts`](lib/game/types.ts) | Shared game types |
-| [`lib/game/constants.ts`](lib/game/constants.ts) | Teams, categories, demo room list |
+| [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) | Production Firestore rules checklist |
+| [`firestore.rules`](firestore.rules) | Rules source of truth |
+| [`firebase.json`](firebase.json) | Points CLI deploys at `firestore.rules` |
+| [`.env.local.example`](.env.local.example) | Env var shape for the web SDK |
+| [`lib/firebase/client.ts`](lib/firebase/client.ts) | Firebase app / Auth / Firestore getters |
+| [`lib/firebase/auth.ts`](lib/firebase/auth.ts) | Anonymous sign-in helper |
+| [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts) | Create room, list last hour, get room, join count |
+| [`lib/firebase/players.ts`](lib/firebase/players.ts) | Join as player, load my seat, live roster, private role |
+| [`lib/game/session.ts`](lib/game/session.ts) | Remember active room code in the browser tab |
+| [`lib/game/themes.ts`](lib/game/themes.ts) | Workshop themes (Municipal only for now) |
+| [`lib/content/`](lib/content/) | CSV parse + load |
+| [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
-| [`app/api/content/*/route.ts`](app/api/content/scenario/route.ts) | Content API endpoints |
 | [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Screens |
-| [`docs/screenshots/epic1/`](docs/screenshots/epic1/) | Epic 1 screenshots |
 
 ---
 
@@ -136,23 +160,27 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 
 ```bash
 npm install
+cp .env.local.example .env.local   # then paste Firebase web keys
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
+Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enabled.
+
 ---
 
-## Explicitly not in this epic
+## Explicitly not in this slice
 
-- Editing / submitting proposals (Epic 4)  
+- Auto-resume straight onto stage (you get a Rejoin button instead)  
+- Editable team proposals (Epic 4)  
+- Multiple themes  
 - Advancing to Round 2 in the UI  
-- Real multiplayer / Firebase  
 - Facilitator judging  
-- Accounts or saved games  
+- Accounts or saved games across browsers  
 
 ---
 
 ## Suggested next increment
 
-**Epic 3 (tiny slice):** real create/join room codes with a live roster — CSV content loading stays as-is.
+**Epic 4:** editable private team proposals (shared text + −2…+2 deltas + submit).

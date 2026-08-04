@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(playerId) {
+      return signedIn() && request.auth.uid == playerId;
+    }
+
+    // Public room metadata (lobby list, theme, counts).
+    match /rooms/{roomId} {
+      allow read, write: if signedIn();
+    }
+
+    // Public roster: name, mark, team — visible to everyone in the room.
+    match /rooms/{roomId}/players/{playerId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(playerId);
+      allow delete: if isSelf(playerId);
+    }
+
+    // Private hidden role — only that player can read/write.
+    match /rooms/{roomId}/secrets/{playerId} {
+      allow read, write: if isSelf(playerId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

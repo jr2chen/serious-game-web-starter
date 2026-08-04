@@ -56,6 +56,7 @@ body {
 
 .screen.active {
   display: flex;
+  position: relative;
 }
 
 .topo {
@@ -107,6 +108,30 @@ h1.title {
   flex: 1;
 }
 
+.rejoin-banner {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--clay) 12%, var(--paper));
+}
+
+.rejoin-copy {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.rejoin-banner .btn {
+  width: 100%;
+}
+
+.rejoin-banner .load-error {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 .section-label {
   font-family: var(--font-mono-face), monospace;
   font-size: 11px;
@@ -114,6 +139,178 @@ h1.title {
   text-transform: uppercase;
   color: var(--ink-soft);
   margin: 0 0 12px;
+}
+
+.section-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.section-row .section-label {
+  margin: 0;
+}
+
+.text-refresh {
+  font-family: var(--font-mono-face), monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--forest);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.room-empty {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.theme-selected {
+  border-color: var(--forest);
+  background: var(--forest-line);
+}
+
+.roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.roster-red {
+  border-left: 3px solid var(--rust);
+}
+
+.roster-blue {
+  border-left: 3px solid #2c5570;
+}
+
+.roster-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.roster-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.roster-team {
+  font-family: var(--font-mono-face), monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.roster-bubble {
+  position: absolute;
+  top: 72px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  font-family: var(--font-body), system-ui, sans-serif;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+  text-align: left;
+}
+
+.roster-bubble:hover {
+  border-color: var(--clay-deep);
+}
+
+.roster-bubble-line {
+  font-family: var(--font-mono-face), monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.roster-bubble-red {
+  color: var(--rust);
+}
+
+.roster-bubble-blue {
+  color: #2c5570;
+}
+
+.roster-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgba(35, 41, 31, 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 64px 14px 16px;
+}
+
+.roster-modal {
+  width: min(100%, 320px);
+  max-height: calc(100% - 80px);
+  overflow: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 16px 20px;
+}
+
+.roster-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.roster-modal-title {
+  font-family: var(--font-display-face), serif;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.roster-modal-close {
+  font-family: var(--font-mono-face), monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px;
+}
+
+.roster-modal-summary {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 16px;
 }
 
 .room-list {

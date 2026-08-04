@@ -55,10 +55,31 @@ export type StarterProposal = {
 };
 
 export type Room = {
+  /** Short join code; also used as the Firestore document id. */
   id: string;
+  code: string;
   name: string;
-  tag: "coastal" | "water" | "energy" | "land";
+  themeId: ThemeId;
+  themeName: string;
   icon: string;
-  topic: string;
+  createdAtMs: number;
+  createdBy: string;
   playerCount: number;
+};
+
+export type RoomPlayer = {
+  id: string;
+  displayName: string;
+  emoji: string;
+  team: TeamId;
+  joinedAtMs: number;
+};
+
+export type ThemeId = "municipal";
+
+export type GameTheme = {
+  id: ThemeId;
+  name: string;
+  blurb: string;
+  icon: string;
 };

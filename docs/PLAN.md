@@ -123,7 +123,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 2 — CSV content (current)
+## Epic 2 — CSV content (done)
 
 **Goal:** Workshop content lives in editable CSV files, not React components.
 
@@ -147,7 +147,55 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ## Epic 3 — Real rooms
 
-Create/join with short codes; live roster; private roles; Firebase + anonymous auth.
+### Slice A — Firebase wiring (done)
+
+**Goal:** Project can connect to Firebase; docs explain setup. No gameplay DB usage yet.
+
+**Stories:**
+- As a developer, I can copy `.env.local.example` and fill Firebase web keys
+- As a workshop host, I can follow [`docs/FIREBASE.md`](FIREBASE.md) to enable Anonymous Auth and Firestore
+- As a developer, I have `getFirebaseAuth` / `getFirebaseDb` helpers ready for the next slice
+
+**Done when:** `firebase` is installed, env template is committed, setup docs exist, and the app still runs without calling Firestore from the UI.
+
+### Slice B — Create / join rooms (done)
+
+**Goal:** Real rooms in Firestore; no demo room list.
+
+**Stories:**
+- As a host, I can create a room and pick a theme (only Municipal Commons for now)
+- As a player, I see open rooms created in the **last hour**
+- As a player, I can join a listed room with name, mark, and team
+- As anyone, create/join signs me in anonymously when needed
+
+**Keep simple:** Short 4-character codes.
+
+**Done when:** Demo rooms are gone; create + list + join work against Firestore.
+
+### Slice C — Live roster + role privacy (done)
+
+**Goal:** Everyone in the room sees who joined; hidden roles stay private.
+
+**Stories:**
+- As a player, after I enter I appear on a live **Players in room** list
+- As anyone in the room, I see others’ name, mark, and visible team
+- As a player, my hidden role is stored so only I can read it (`secrets/{uid}`)
+- As a player, re-joining the same browser seat updates my roster row without double-counting
+
+**Done when:** Two devices in one room see each other on the roster; each only sees their own role card.
+
+### Slice D — Rejoin after refresh (current)
+
+**Goal:** Refreshing the tab does not trap you out of a room you still belong to.
+
+**Stories:**
+- As a player, if I refresh while still seated, Main shows a **Rejoin** button for that room
+- As a player, Rejoin restores my name, mark, team, and private role without re-picking
+- As a player, **Leave room** clears the rejoin offer for this tab
+
+**Keep simple:** `sessionStorage` + existing player/secret docs; no auto-jump onto stage.
+
+**Done when:** Refresh → Main with Rejoin → Stage with the same seat.
 
 ---
 
@@ -178,13 +226,15 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 ## Suggested tiny build order
 
 1. Epic 1 — team pick + role + five categories (done)
-2. **Epic 2** — CSV scenarios / roles / starter proposals (this slice)
-3. Epic 3a — create/join + roster
-4. Epic 3b — role privacy across devices
-5. Epic 4 — editable private team proposals
-6. Epic 5 — reveal + facilitator apply deltas
-7. Epic 6 — derived scores + next/end
-8. Epic 7 — polish
+2. Epic 2 — CSV scenarios / roles / starter proposals (done)
+3. **Epic 3a** — Firebase env + client wiring (done)
+4. Epic 3b — create/join + last-hour room list (done)
+5. Epic 3c — live roster + private role secrets (done)
+6. **Epic 3d** — rejoin button after refresh (this slice)
+7. Epic 4 — editable private team proposals
+8. Epic 5 — reveal + facilitator apply deltas
+9. Epic 6 — derived scores + next/end
+10. Epic 7 — polish
 
 ---
 
