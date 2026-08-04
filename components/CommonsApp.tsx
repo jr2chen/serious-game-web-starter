@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   assignHiddenRole,
   createRoom,
@@ -8,7 +8,9 @@ import {
   getScenario,
   getStarterProposal,
   listRooms,
+  notePlayerJoined,
 } from "@/lib/api/client";
+import { isFirebaseConfigured } from "@/lib/firebase/client";
 import type {
   CategoryId,
   CategoryTotals,
@@ -17,20 +19,15 @@ import type {
   Scenario,
   StarterProposal,
   TeamId,
+  ThemeId,
 } from "@/lib/game/types";
 import { CATEGORIES, EMOJI_OPTIONS, TEAMS } from "@/lib/game/constants";
 import { roleRuleLabel } from "@/lib/game/scoring";
+import { THEME_LIST } from "@/lib/game/themes";
 
-type Screen = "main" | "entry" | "stage";
+type Screen = "main" | "create" | "entry" | "stage";
 
 type EntryMode = "join" | "create";
-
-const TAG_CLASS: Record<Room["tag"], string> = {
-  coastal: "tag-coastal",
-  water: "tag-water",
-  energy: "tag-energy",
-  land: "tag-land",
-};
 
 const DELTA_KEYS: CategoryId[] = [
   "jobs",
@@ -49,11 +46,22 @@ function formatDiscussion(seconds: number): string {
   return minutes === 1 ? "1 minute" : `${minutes} minutes`;
 }
 
+function formatAge(createdAtMs: number): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - createdAtMs) / 60000));
+  if (minutes < 1) return "Just now";
+  if (minutes === 1) return "1 min ago";
+  return `${minutes} min ago`;
+}
+
 export default function CommonsApp() {
   const [screen, setScreen] = useState<Screen>("main");
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [roomsError, setRoomsError] = useState<string | null>(null);
   const [entryMode, setEntryMode] = useState<EntryMode | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [selectedThemeId, setSelectedThemeId] = useState<ThemeId>("municipal");
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
   const [team, setTeam] = useState<TeamId | null>(null);
@@ -64,14 +72,39 @@ export default function CommonsApp() {
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void listRooms().then(setRooms);
+  const refreshRooms = useCallback(async () => {
+    if (!isFirebaseConfigured()) {
+      setRooms([]);
+      setRoomsError(
+        "Firebase is not configured. Copy .env.local.example to .env.local — see docs/FIREBASE.md.",
+      );
+      setRoomsLoading(false);
+      return;
+    }
+    setRoomsLoading(true);
+    setRoomsError(null);
+    try {
+      setRooms(await listRooms());
+    } catch (error) {
+      setRooms([]);
+      setRoomsError(
+        error instanceof Error ? error.message : "Could not load rooms",
+      );
+    } finally {
+      setRoomsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshRooms();
+  }, [refreshRooms]);
 
   function goMain() {
     setScreen("main");
     setEntryMode(null);
     setSelectedRoom(null);
+    setSelectedThemeId("municipal");
+    setCreating(false);
     setName("");
     setEmoji(null);
     setTeam(null);
@@ -81,6 +114,7 @@ export default function CommonsApp() {
     setHiddenRole(null);
     setCategories(null);
     setLoadError(null);
+    void refreshRooms();
   }
 
   function startJoin(room: Room) {
@@ -93,32 +127,47 @@ export default function CommonsApp() {
     setScreen("entry");
   }
 
-  async function startCreate() {
-    const room = await createRoom();
-    setEntryMode("create");
-    setSelectedRoom(room);
-    setName("");
-    setEmoji(null);
-    setTeam(null);
+  function openCreate() {
+    setSelectedThemeId("municipal");
     setLoadError(null);
-    setScreen("entry");
+    setScreen("create");
+  }
+
+  async function confirmCreate() {
+    setCreating(true);
+    setLoadError(null);
+    try {
+      const room = await createRoom(selectedThemeId);
+      setEntryMode("create");
+      setSelectedRoom(room);
+      setName("");
+      setEmoji(null);
+      setTeam(null);
+      setScreen("entry");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not create room",
+      );
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function confirmEntry() {
-    if (!team) return;
+    if (!team || !selectedRoom) return;
 
     const displayName = name.trim() || "Player";
     const mark = emoji ?? "🙂";
-    const room = selectedRoom;
 
     try {
       setLoadError(null);
       const [nextScenario, role, totals] = await Promise.all([
-        getScenario(room?.id),
+        getScenario(selectedRoom.id),
         assignHiddenRole(team),
         getCategoryTotals(),
       ]);
       const proposal = await getStarterProposal(nextScenario.scenario_id, team);
+      await notePlayerJoined(selectedRoom.code);
 
       setName(displayName);
       setEmoji(mark);
@@ -126,7 +175,7 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(role);
       setCategories(totals);
-      setRoomLabel(entryMode === "create" ? "New room" : (room?.name ?? "Room"));
+      setRoomLabel(`${selectedRoom.code} · ${selectedRoom.themeName}`);
       setScreen("stage");
     } catch (error) {
       setLoadError(
@@ -178,36 +227,104 @@ export default function CommonsApp() {
             </p>
           </div>
           <div className="main-body">
-            <p className="section-label">Open rooms</p>
-            <div className="room-list">
-              {rooms.map((room) => (
-                <button
-                  key={room.id}
-                  type="button"
-                  className="room-card"
-                  onClick={() => startJoin(room)}
-                >
-                  <div className={`room-tag ${TAG_CLASS[room.tag]}`}>
-                    {room.icon}
-                  </div>
-                  <div className="room-info">
-                    <p className="room-name">{room.name}</p>
-                    <p className="room-meta">{room.topic}</p>
-                  </div>
-                  <div className="room-count">
-                    {room.playerCount}{" "}
-                    {room.playerCount === 1 ? "player" : "players"}
-                  </div>
-                </button>
-              ))}
+            <div className="section-row">
+              <p className="section-label">Open rooms · last hour</p>
+              <button
+                type="button"
+                className="text-refresh"
+                onClick={() => void refreshRooms()}
+              >
+                Refresh
+              </button>
             </div>
+
+            {roomsLoading && <p className="room-empty">Loading rooms…</p>}
+            {!roomsLoading && roomsError && (
+              <p className="load-error">{roomsError}</p>
+            )}
+            {!roomsLoading && !roomsError && rooms.length === 0 && (
+              <p className="room-empty">
+                No rooms in the last hour. Create one to get started.
+              </p>
+            )}
+            {!roomsLoading && !roomsError && rooms.length > 0 && (
+              <div className="room-list">
+                {rooms.map((room) => (
+                  <button
+                    key={room.id}
+                    type="button"
+                    className="room-card"
+                    onClick={() => startJoin(room)}
+                  >
+                    <div className="room-tag tag-land">{room.icon}</div>
+                    <div className="room-info">
+                      <p className="room-name">
+                        {room.code} · {room.themeName}
+                      </p>
+                      <p className="room-meta">{formatAge(room.createdAtMs)}</p>
+                    </div>
+                    <div className="room-count">
+                      {room.playerCount}{" "}
+                      {room.playerCount === 1 ? "player" : "players"}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => void startCreate()}
+              onClick={openCreate}
             >
               Create room
             </button>
+          </div>
+        </div>
+      )}
+
+      {screen === "create" && (
+        <div className="screen active">
+          <div className="entry-header">
+            <button type="button" className="back-link" onClick={goMain}>
+              ← Back
+            </button>
+          </div>
+          <div className="entry-body">
+            <h2 className="entry-title">Create a room</h2>
+            <p className="entry-sub">
+              Pick a theme, then share the short room code with your group.
+            </p>
+
+            <label className="field-label">Theme</label>
+            <div className="team-picker">
+              {THEME_LIST.map((theme) => (
+                <button
+                  key={theme.id}
+                  type="button"
+                  className={`team-opt${selectedThemeId === theme.id ? " selected theme-selected" : ""}`}
+                  onClick={() => setSelectedThemeId(theme.id)}
+                >
+                  <span className="team-opt-name">
+                    {theme.icon} {theme.name}
+                  </span>
+                  <span className="team-opt-goal">{theme.blurb}</span>
+                </button>
+              ))}
+            </div>
+
+            {loadError && <p className="load-error">{loadError}</p>}
+
+            <div className="entry-footer">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={creating}
+                onClick={() => void confirmCreate()}
+              >
+                {creating ? "Creating…" : "Create and continue"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -219,19 +336,18 @@ export default function CommonsApp() {
               ← Back
             </button>
             <div className="context-card">
-              <div className={`room-tag ${TAG_CLASS[selectedRoom.tag]}`}>
-                {selectedRoom.icon}
-              </div>
+              <div className="room-tag tag-land">{selectedRoom.icon}</div>
               <div className="room-info">
                 <p className="room-name">
                   {entryMode === "create"
-                    ? "Creating a new room"
-                    : `Joining ${selectedRoom.name}`}
+                    ? `Room ${selectedRoom.code} ready`
+                    : `Joining ${selectedRoom.code}`}
                 </p>
                 <p className="room-meta">
-                  {entryMode === "create"
-                    ? "Scenario assigned automatically for now"
-                    : `${selectedRoom.topic} · ${selectedRoom.playerCount} players`}
+                  {selectedRoom.themeName}
+                  {entryMode === "join"
+                    ? ` · ${selectedRoom.playerCount} players`
+                    : " · share this code"}
                 </p>
               </div>
             </div>

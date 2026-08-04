@@ -1,49 +1,56 @@
-# Commons — Epic 3 (Firebase setup)
+# Commons — Epic 3b (Create / join rooms)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
 **Working agreement:** keep increments extremely small and code changes minimal. After each change, keep this README in sync with the current epic, and end with a suggested commit message (see [`.cursor/skills/step-readme-and-commit/SKILL.md`](.cursor/skills/step-readme-and-commit/SKILL.md)).
 
 Living product plan: [`docs/PLAN.md`](docs/PLAN.md).  
-Firebase project setup: [`docs/FIREBASE.md`](docs/FIREBASE.md).
+Firebase project setup: [`docs/FIREBASE.md`](docs/FIREBASE.md).  
+Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md).
 
 ---
 
 ## How we got here
 
+
 **Epic 0** — join/create → name + emoji → stage shell  
 **Epic 1** — pick Red/Blue team; show hidden role + five city categories  
-**Epic 2** — load Round 1 scenario, roles, and starter proposals from CSV  
-**Epic 3 (this slice)** — install Firebase SDK, env template, and setup docs (**no room database usage yet**)
-
-Gameplay screens still use CSV + local demo rooms. Firestore create/join comes next.
-
----
-
-## User flow (unchanged this slice)
-
-```
-Main → Join/Create → Name + emoji + team → Stage
-```
-
-Same as Epic 2. Firebase is wired in code but not called from the UI yet.
+**Epic 2** — load Round 1 scenario, roles, and starter proposals from CSV   
+**Epic 3a** — Firebase SDK + env template + setup docs  
+**Epic 3b (current)** — real Firestore rooms: create with theme, list last hour, join
 
 ---
 
-## Firebase setup (start here for Epic 3)
+## User flow (this slice)
 
-1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md) (checklist you can tick off) to create a project, enable **Anonymous Auth**, and create **Firestore**
-2. Copy the env template:
+```
+Main (rooms from last hour)
+  ├─ Join room ──► Name + emoji + team ──► Stage
+  └─ Create room ──► Pick theme ──► Name + emoji + team ──► Stage
+```
+
+- Room list comes from Firestore (created in the **last hour** only) — no demo rooms
+- Create: pick **Municipal Commons** (only theme for now) → get a short code
+- Enter: name, mark, team → CSV scenario + starter proposal as before
+
+---
+
+## Firebase setup (required for rooms)
+
+1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md) (checklist) — project, **Anonymous Auth**, **Firestore**
+2. Copy env template and paste web keys:
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-3. Paste your web app config into `.env.local` (six `NEXT_PUBLIC_FIREBASE_*` values)
-4. Restart `npm run dev`
+3. Restart `npm run dev`
 
-Template shape: [`.env.local.example`](.env.local.example).  
-Client helpers: [`lib/firebase/client.ts`](lib/firebase/client.ts).
+Without `.env.local`, the main screen shows a configuration error instead of rooms.
+
+If Firestore is in **production mode**, publish rules from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) or create/join will be denied.
+
+Room helpers: [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts), [`lib/firebase/auth.ts`](lib/firebase/auth.ts).
 
 ---
 
@@ -133,9 +140,14 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | Path | Role |
 | --- | --- |
 | [`docs/PLAN.md`](docs/PLAN.md) | Epics + locked V1 scoring |
-| [`docs/FIREBASE.md`](docs/FIREBASE.md) | Firebase / Firestore / Anonymous Auth setup |
+| [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) | Production Firestore rules checklist |
+| [`firestore.rules`](firestore.rules) | Rules source of truth |
+| [`firebase.json`](firebase.json) | Points CLI deploys at `firestore.rules` |
 | [`.env.local.example`](.env.local.example) | Env var shape for the web SDK |
 | [`lib/firebase/client.ts`](lib/firebase/client.ts) | Firebase app / Auth / Firestore getters |
+| [`lib/firebase/auth.ts`](lib/firebase/auth.ts) | Anonymous sign-in helper |
+| [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts) | Create room, list last hour, join count |
+| [`lib/game/themes.ts`](lib/game/themes.ts) | Workshop themes (Municipal only for now) |
 | [`lib/content/`](lib/content/) | CSV parse + load |
 | [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
@@ -153,15 +165,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The game UI still works without Firebase configured; room sync will require `.env.local` in the next slice.
+Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enabled.
 
 ---
 
 ## Explicitly not in this slice
 
-- Creating or joining real Firestore rooms  
-- Anonymous sign-in from the UI  
-- Live player roster  
+- Live player roster UI  
+- Locked-down production Firestore rules in-repo  
+- Multiple themes  
 - Editing / submitting proposals  
 - Advancing to Round 2 in the UI  
 - Accounts or saved games  
@@ -170,4 +182,4 @@ The game UI still works without Firebase configured; room sync will require `.en
 
 ## Suggested next increment
 
-**Epic 3 next:** anonymous sign-in + create/join room with a short code and live roster in Firestore.
+**Epic 3c:** live roster in the room (who joined) while keeping hidden roles private.

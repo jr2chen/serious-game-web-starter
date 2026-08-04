@@ -1,10 +1,4 @@
-import type {
-  Category,
-  CategoryTotals,
-  Room,
-  Team,
-  TeamId,
-} from "@/lib/game/types";
+import type { Category, CategoryTotals, Team, TeamId } from "@/lib/game/types";
 
 export const TEAMS: Record<TeamId, Team> = {
   red: {
@@ -56,42 +50,6 @@ export const INITIAL_CATEGORY_TOTALS: CategoryTotals = {
   climate: 0,
   cost: 0,
 };
-
-/** Placeholder open-room list until Firebase rooms (Epic 3). */
-export const DEMO_ROOMS: Room[] = [
-  {
-    id: "coastal-rezoning",
-    name: "Coastal Rezoning",
-    tag: "coastal",
-    icon: "🌊",
-    topic: "Land use",
-    playerCount: 3,
-  },
-  {
-    id: "water-rights",
-    name: "Water Rights Dispute",
-    tag: "water",
-    icon: "💧",
-    topic: "Water",
-    playerCount: 2,
-  },
-  {
-    id: "community-solar",
-    name: "Community Solar Co-op",
-    tag: "energy",
-    icon: "☀️",
-    topic: "Energy",
-    playerCount: 5,
-  },
-  {
-    id: "farmland-buyout",
-    name: "Farmland Buyout",
-    tag: "land",
-    icon: "🌾",
-    topic: "Land use",
-    playerCount: 1,
-  },
-];
 
 export const EMOJI_OPTIONS = [
   "🙂",

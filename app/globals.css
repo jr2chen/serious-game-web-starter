@@ -116,6 +116,43 @@ h1.title {
   margin: 0 0 12px;
 }
 
+.section-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.section-row .section-label {
+  margin: 0;
+}
+
+.text-refresh {
+  font-family: var(--font-mono-face), monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--forest);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.room-empty {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.theme-selected {
+  border-color: var(--forest);
+  background: var(--forest-line);
+}
+
 .room-list {
   display: flex;
   flex-direction: column;

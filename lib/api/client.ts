@@ -5,10 +5,16 @@ import type {
   Scenario,
   StarterProposal,
   TeamId,
+  ThemeId,
 } from "@/lib/game/types";
-import { DEMO_ROOMS, INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
+import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
+import {
+  createRoom as createFirestoreRoom,
+  listRecentRooms,
+  recordPlayerJoined,
+} from "@/lib/firebase/rooms";
 
-/** Browser client for game content and room helpers. */
+/** Browser client for game content and rooms. */
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -20,7 +26,15 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 export async function listRooms(): Promise<Room[]> {
-  return DEMO_ROOMS;
+  return listRecentRooms();
+}
+
+export async function createRoom(themeId: ThemeId): Promise<Room> {
+  return createFirestoreRoom(themeId);
+}
+
+export async function notePlayerJoined(roomCode: string): Promise<void> {
+  await recordPlayerJoined(roomCode);
 }
 
 export async function getScenario(_roomId?: string): Promise<Scenario> {
@@ -33,17 +47,6 @@ export async function getStarterProposal(
 ): Promise<StarterProposal> {
   const params = new URLSearchParams({ scenario_id: scenarioId, team });
   return getJson<StarterProposal>(`/api/content/starter-proposal?${params}`);
-}
-
-export async function createRoom(): Promise<Room> {
-  return {
-    id: `new-${Date.now()}`,
-    name: "New room",
-    tag: "land",
-    icon: "＋",
-    topic: "Assigned automatically",
-    playerCount: 1,
-  };
 }
 
 export async function getCategoryTotals(): Promise<CategoryTotals> {

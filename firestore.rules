@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Workshop lobby rooms — any signed-in (anonymous) user can read/write.
+    // Tighten later when player roles and private proposals are stored here.
+    match /rooms/{roomId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

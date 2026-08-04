@@ -55,12 +55,12 @@ function getFirebaseApp(): FirebaseApp {
   return getApps().length ? getApp() : initializeApp(config);
 }
 
-/** Browser Firebase Auth instance (Anonymous Auth comes in a later Epic 3 slice). */
+/** Browser Firebase Auth instance. */
 export function getFirebaseAuth(): Auth {
   return getAuth(getFirebaseApp());
 }
 
-/** Browser Firestore instance (room reads/writes come in a later Epic 3 slice). */
+/** Browser Firestore instance. */
 export function getFirebaseDb(): Firestore {
   return getFirestore(getFirebaseApp());
 }

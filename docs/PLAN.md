@@ -147,7 +147,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ## Epic 3 — Real rooms
 
-### Slice A — Firebase wiring (current)
+### Slice A — Firebase wiring (done)
 
 **Goal:** Project can connect to Firebase; docs explain setup. No gameplay DB usage yet.
 
@@ -158,9 +158,23 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** `firebase` is installed, env template is committed, setup docs exist, and the app still runs without calling Firestore from the UI.
 
-### Slice B — Create / join / roster (next)
+### Slice B — Create / join rooms (current)
 
-Create/join with short codes; live roster; private roles; anonymous auth from the UI.
+**Goal:** Real rooms in Firestore; no demo room list.
+
+**Stories:**
+- As a host, I can create a room and pick a theme (only Municipal Commons for now)
+- As a player, I see open rooms created in the **last hour**
+- As a player, I can join a listed room with name, mark, and team
+- As anyone, create/join signs me in anonymously when needed
+
+**Keep simple:** No live roster UI yet; playerCount increments on enter. Short 4-character codes.
+
+**Done when:** Demo rooms are gone; create + list + join work against Firestore.
+
+### Slice C — Live roster + role privacy (next)
+
+Live player list for the facilitator/host view; ensure hidden roles stay private across devices.
 
 ---
 
@@ -192,9 +206,9 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 
 1. Epic 1 — team pick + role + five categories (done)
 2. Epic 2 — CSV scenarios / roles / starter proposals (done)
-3. **Epic 3a** — Firebase env + client wiring (this slice)
-4. Epic 3b — create/join + roster
-5. Epic 3c — role privacy across devices
+3. **Epic 3a** — Firebase env + client wiring (done)
+4. **Epic 3b** — create/join + last-hour room list (this slice)
+5. Epic 3c — live roster + role privacy
 6. Epic 4 — editable private team proposals
 7. Epic 5 — reveal + facilitator apply deltas
 8. Epic 6 — derived scores + next/end
