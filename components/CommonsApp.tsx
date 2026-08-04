@@ -82,6 +82,8 @@ export default function CommonsApp() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [roster, setRoster] = useState<RoomPlayer[]>([]);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
+  const [scoreInfoOpen, setScoreInfoOpen] = useState(false);
   const [rejoinCode, setRejoinCode] = useState<string | null>(null);
   const [rejoining, setRejoining] = useState(false);
 
@@ -185,6 +187,8 @@ export default function CommonsApp() {
     setLoadError(null);
     setRoster([]);
     setRosterOpen(false);
+    setRoleOpen(false);
+    setScoreInfoOpen(false);
     void refreshRooms();
   }
 
@@ -568,23 +572,34 @@ export default function CommonsApp() {
         hiddenRole &&
         categories &&
         starter && (
-          <div className="screen active">
+          <div className="screen active stage-screen">
             <div className="stage-header">
-              <div className="player-chip">
-                <div className="avatar">{emoji ?? "🙂"}</div>
-                <span>{name || "Player"}</span>
+              <div className="stage-header-left">
+                <div className="player-chip">
+                  <div className="avatar">{emoji ?? "🙂"}</div>
+                  <span>{name || "Player"}</span>
+                </div>
+                <button
+                  type="button"
+                  className={`identity-badge identity-${teamInfo.id}${roleOpen ? " open" : ""}`}
+                  onClick={() => setRoleOpen((open) => !open)}
+                  aria-expanded={roleOpen}
+                  aria-controls="role-panel"
+                >
+                  <span className="identity-badge-text">
+                    {teamInfo.id === "red" ? "Red" : "Blue"} ·{" "}
+                    {hiddenRole.role_name}
+                  </span>
+                  <span className="identity-chevron" aria-hidden>
+                    {roleOpen ? "▴" : "▾"}
+                  </span>
+                </button>
               </div>
               <div className="room-pill">{roomLabel}</div>
             </div>
-            <div className="stage-body">
-              <div className={`team-badge team-badge-${teamInfo.id}`}>
-                <span className="team-badge-name">{teamInfo.name}</span>
-                <span className="team-badge-goal">
-                  Promotes {teamInfo.goalLabel}
-                </span>
-              </div>
 
-              <div className="role-card">
+            {roleOpen && (
+              <div className="role-panel" id="role-panel">
                 <p className="role-eyebrow">Private · hidden role</p>
                 <h3 className="role-name">{hiddenRole.role_name}</h3>
                 <p className="role-desc">{hiddenRole.description}</p>
@@ -597,28 +612,41 @@ export default function CommonsApp() {
                   )}
                   .
                 </p>
+                <p className="role-team-note">
+                  {teamInfo.name} promotes {teamInfo.goalLabel}.
+                </p>
               </div>
+            )}
 
-              <p className="section-label">City categories</p>
-              <div className="category-strip">
-                {CATEGORIES.map((cat) => (
-                  <div key={cat.id} className="category-chip" title={cat.blurb}>
-                    <span className="category-name">{cat.name}</span>
-                    <span className="category-value">
-                      {categories[cat.id] > 0 ? "+" : ""}
-                      {categories[cat.id]}
+            <div className="stage-body">
+              <div className="scoreboard">
+                <p className="scoreboard-bar">
+                  {CATEGORIES.map((cat, index) => (
+                    <span key={cat.id}>
+                      {index > 0 ? " · " : ""}
+                      {cat.name} {categories[cat.id]}
                     </span>
-                  </div>
-                ))}
+                  ))}
+                </p>
+                <button
+                  type="button"
+                  className="scoreboard-info"
+                  aria-expanded={scoreInfoOpen}
+                  aria-controls="scoreboard-tip"
+                  aria-label="How team scoring works"
+                  onClick={() => setScoreInfoOpen((open) => !open)}
+                >
+                  i
+                </button>
               </div>
-              <p className="category-note">
-                Red score = Jobs + Housing · Blue score = Accessibility + Climate
-                · Cost is shared
-              </p>
+              {scoreInfoOpen && (
+                <p className="scoreboard-tip" id="scoreboard-tip">
+                  Red score = Jobs + Housing. Blue score = Accessibility +
+                  Climate. Cost is shared.
+                </p>
+              )}
 
-              <p className="stage-eyebrow">
-                Round {scenario.round_order} of 2 · from CSV
-              </p>
+              <p className="stage-eyebrow">Round {scenario.round_order}</p>
               <h2 className="scenario-title">{scenario.title}</h2>
               <div className="scenario-meta">
                 <span className="meta-tag">
@@ -649,15 +677,10 @@ export default function CommonsApp() {
                     </div>
                   ))}
                 </div>
-                <p className="proposal-note">
-                  Read-only for now. Editing and submit arrive in Epic 4.
-                </p>
               </div>
             </div>
+
             <div className="stage-footer">
-              <p className="footer-note">
-                Round 2 lives in CSV already; advancing rounds comes later.
-              </p>
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -671,14 +694,10 @@ export default function CommonsApp() {
               type="button"
               className="roster-bubble"
               onClick={() => setRosterOpen(true)}
-              aria-label="Open player roster"
+              aria-label={`Open players list, ${roster.length} in room`}
             >
-              <span className="roster-bubble-line roster-bubble-red">
-                {redCount} Red
-              </span>
-              <span className="roster-bubble-line roster-bubble-blue">
-                {blueCount} Blue
-              </span>
+              <span className="roster-bubble-label">Players</span>
+              <span className="roster-bubble-count">{roster.length}</span>
             </button>
 
             {rosterOpen && (
@@ -696,7 +715,7 @@ export default function CommonsApp() {
                 >
                   <div className="roster-modal-header">
                     <h2 id="roster-modal-title" className="roster-modal-title">
-                      Players · {roster.length}
+                      In this room
                     </h2>
                     <button
                       type="button"
