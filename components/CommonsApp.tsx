@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import QRCode from "react-qr-code";
 import {
   assignHiddenRole,
   createRoom,
@@ -136,6 +137,8 @@ export default function CommonsApp() {
   const [scoreInfoOpen, setScoreInfoOpen] = useState(false);
   const [rejoinCode, setRejoinCode] = useState<string | null>(null);
   const [rejoining, setRejoining] = useState(false);
+  /** Current page URL for the main-screen QR (preview / prod / localhost). */
+  const [pageUrl, setPageUrl] = useState("");
 
   const refreshRooms = useCallback(async () => {
     if (!isFirebaseConfigured()) {
@@ -163,6 +166,10 @@ export default function CommonsApp() {
   useEffect(() => {
     void refreshRooms();
   }, [refreshRooms]);
+
+  useEffect(() => {
+    setPageUrl(window.location.href);
+  }, []);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -497,6 +504,30 @@ export default function CommonsApp() {
             >
               Create room
             </button>
+
+            {pageUrl && (
+              <div className="mt-7 flex items-center gap-4 rounded-[10px] border border-line bg-card p-3">
+                <div className="shrink-0 rounded-lg bg-white p-2">
+                  <QRCode
+                    value={pageUrl}
+                    size={88}
+                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                    viewBox="0 0 88 88"
+                    aria-label="QR code for this page"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="label-mono mb-1">Scan to open</p>
+                  <p className="text-[12.5px] leading-[1.4] text-ink-soft">
+                    Join from your phone — same link as this tab (preview, prod,
+                    or local).
+                  </p>
+                  <p className="mt-1 truncate font-mono text-[10px] text-ink-soft">
+                    {pageUrl}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -801,7 +832,7 @@ export default function CommonsApp() {
                   {hiddenRole.description}
                 </p>
                 <p className="mb-2 text-[12.5px] leading-[1.45] text-ink-soft">
-                  You score 1 point at end of game if{" "}
+                  You score 1 extra point at end of game if{" "}
                   {roleRuleLabel(
                     hiddenRole.target_category,
                     hiddenRole.comparison,

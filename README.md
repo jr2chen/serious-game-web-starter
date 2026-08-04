@@ -14,14 +14,14 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 **Epic 0–2** — UI shell, teams/roles, CSV content  
 **Epic 3** — Firebase rooms, roster, rejoin  
-**This slice** — UI styles moved to Tailwind (so markup and look stay in one place)  
+**This slice** — UI styles moved to Tailwind; main screen shows a QR for the current URL  
 **Next** — Epic 4 (editable team proposals)
 
 ---
 
 ## User flow (this slice)
 
-Same join/create/rejoin flow. The stage header is three pinned rows:
+Same join/create/rejoin flow. On the **main** screen, a QR code encodes the current page URL so you can open the same preview, production, or local link on a phone. The stage header is three pinned rows:
 
 1. **Name · Role** — player chip + **Red · Role ▾** badge (tap to expand/collapse the private role card)
 2. **City scores** — horizontal chips (`Jobs 0`, `Housing 0`, …) tinted **red** (Jobs/Housing) or **blue** (Accessibility/Climate); Cost stays neutral since it's shared. Tap **any** chip to reveal the scoring-rule explanation
