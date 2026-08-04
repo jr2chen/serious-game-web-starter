@@ -62,6 +62,56 @@ function formatAge(createdAtMs: number): string {
   return `${minutes} min ago`;
 }
 
+/** mm:ss for the mock discussion timer. */
+function formatTimer(seconds: number): string {
+  const clamped = Math.max(0, Math.round(seconds));
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+const SCORE_ABBR: Record<CategoryId, string> = {
+  jobs: "Jobs",
+  housing: "Housing",
+  accessibility: "Access",
+  climate: "Climate",
+  cost: "Cost",
+};
+
+/** Which team a category counts toward, for coloring the score chip. */
+function scoreTeamOf(categoryId: CategoryId): TeamId | "shared" {
+  if (TEAMS.red.goalCategories.includes(categoryId)) return "red";
+  if (TEAMS.blue.goalCategories.includes(categoryId)) return "blue";
+  return "shared";
+}
+
+/** Chip background/border classes for a score category, by team. Always
+ * a single class string per property so utility precedence stays unambiguous. */
+function scoreChipTint(teamOf: TeamId | "shared"): string {
+  if (teamOf === "red") return "bg-team-red-soft border-team-red-line";
+  if (teamOf === "blue") return "bg-team-blue-soft border-team-blue-line";
+  return "";
+}
+
+function scoreValueTint(teamOf: TeamId | "shared"): string {
+  if (teamOf === "red") return "text-rust";
+  if (teamOf === "blue") return "text-team-blue";
+  return "text-ink";
+}
+
+const CARD_ROW =
+  "card flex w-full cursor-pointer items-center gap-3 px-4 py-[14px] text-left font-sans text-inherit transition-[border-color,transform] duration-150 hover:border-clay-deep active:scale-[0.99]";
+
+const ROOM_TAG =
+  "flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg bg-[#efe6d8] font-display text-[15px] font-semibold text-[#6f5230]";
+
+const ROOM_NAME = "mb-[2px] text-[14.5px] font-semibold";
+const ROOM_META = "text-[12.5px] text-ink-soft";
+const LOAD_ERROR = "mb-4 text-[13px] leading-[1.4] text-rust";
+const FIELD_LABEL = "label-mono mb-2 block";
+const OPT_CARD =
+  "card flex flex-col gap-1 px-4 py-[14px] text-left font-sans text-inherit cursor-pointer";
+
 export default function CommonsApp() {
   const [screen, setScreen] = useState<Screen>("main");
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -76,12 +126,14 @@ export default function CommonsApp() {
   const [team, setTeam] = useState<TeamId | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [starter, setStarter] = useState<StarterProposal | null>(null);
-  const [roomLabel, setRoomLabel] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [roster, setRoster] = useState<RoomPlayer[]>([]);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
+  const [scoreInfoOpen, setScoreInfoOpen] = useState(false);
   const [rejoinCode, setRejoinCode] = useState<string | null>(null);
   const [rejoining, setRejoining] = useState(false);
 
@@ -166,6 +218,15 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom]);
 
+  /** Mock countdown only — not synced across players or persisted. */
+  useEffect(() => {
+    if (screen !== "stage") return;
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => (prev === null || prev <= 0 ? prev : prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [screen]);
+
   function goMain() {
     clearActiveRoom();
     setRejoinCode(null);
@@ -179,12 +240,14 @@ export default function CommonsApp() {
     setTeam(null);
     setScenario(null);
     setStarter(null);
-    setRoomLabel("");
+    setSecondsLeft(null);
     setHiddenRole(null);
     setCategories(null);
     setLoadError(null);
     setRoster([]);
     setRosterOpen(false);
+    setRoleOpen(false);
+    setScoreInfoOpen(false);
     void refreshRooms();
   }
 
@@ -252,7 +315,7 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(role);
       setCategories(totals);
-      setRoomLabel(`${selectedRoom.code} · ${selectedRoom.themeName}`);
+      setSecondsLeft(nextScenario.discussion_seconds);
       rememberActiveRoom(selectedRoom.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -295,7 +358,7 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(seat.role);
       setCategories(totals);
-      setRoomLabel(`${room.code} · ${room.themeName}`);
+      setSecondsLeft(nextScenario.discussion_seconds);
       rememberActiveRoom(room.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -313,12 +376,12 @@ export default function CommonsApp() {
   const blueCount = roster.filter((p) => p.team === "blue").length;
 
   return (
-    <div className="device">
+    <div className="relative w-[420px] overflow-visible rounded-[20px] border border-line bg-paper shadow-[0_1px_0_rgba(0,0,0,0.03)] max-[480px]:min-h-dvh max-[480px]:w-full max-[480px]:rounded-none max-[480px]:border-none">
       {screen === "main" && (
-        <div className="screen active">
-          <div className="main-hero">
+        <div className="flex flex-col">
+          <div className="relative overflow-hidden bg-forest px-[28px] pt-[44px] pb-[28px] text-paper">
             <svg
-              className="topo"
+              className="pointer-events-none absolute top-0 right-0 left-0 h-[220px] opacity-50"
               viewBox="0 0 420 220"
               preserveAspectRatio="none"
               aria-hidden
@@ -345,17 +408,21 @@ export default function CommonsApp() {
                 opacity="0.1"
               />
             </svg>
-            <p className="eyebrow">A workshop for shared decisions</p>
-            <h1 className="title">Commons</h1>
-            <p className="tagline">
+            <p className="mb-[10px] font-mono text-[11px] tracking-[0.14em] text-[#c9d6c1] uppercase">
+              A workshop for shared decisions
+            </p>
+            <h1 className="mb-3 font-display text-[40px] leading-[1.02] font-semibold tracking-[-0.01em]">
+              Commons
+            </h1>
+            <p className="max-w-[30ch] text-[14.5px] leading-[1.5] text-[#dde6d5]">
               Step into real trade-offs over land, water, and energy — and see
               where the group lands.
             </p>
           </div>
-          <div className="main-body">
+          <div className="flex-1 px-6 pt-6 pb-8">
             {rejoinCode && (
-              <div className="rejoin-banner">
-                <p className="rejoin-copy">
+              <div className="mb-6 rounded-xl border border-line bg-[var(--tint-clay-soft)] p-4">
+                <p className="mb-3 text-sm leading-[1.4] text-ink">
                   You still have a seat in room <strong>{rejoinCode}</strong>.
                 </p>
                 <button
@@ -367,48 +434,54 @@ export default function CommonsApp() {
                   {rejoining ? "Rejoining…" : `Rejoin ${rejoinCode}`}
                 </button>
                 {loadError && screen === "main" && (
-                  <p className="load-error">{loadError}</p>
+                  <p className="mt-[10px] mb-0 text-[13px] leading-[1.4] text-rust">
+                    {loadError}
+                  </p>
                 )}
               </div>
             )}
 
-            <div className="section-row">
-              <p className="section-label">Open rooms · last hour</p>
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <p className="label-mono">Open rooms · last hour</p>
               <button
                 type="button"
-                className="text-refresh"
+                className="cursor-pointer border-none bg-transparent p-0 font-mono text-[11px] tracking-[0.06em] text-forest uppercase underline"
                 onClick={() => void refreshRooms()}
               >
                 Refresh
               </button>
             </div>
 
-            {roomsLoading && <p className="room-empty">Loading rooms…</p>}
+            {roomsLoading && (
+              <p className="mb-6 text-[13.5px] leading-[1.5] text-ink-soft">
+                Loading rooms…
+              </p>
+            )}
             {!roomsLoading && roomsError && (
-              <p className="load-error">{roomsError}</p>
+              <p className={LOAD_ERROR}>{roomsError}</p>
             )}
             {!roomsLoading && !roomsError && rooms.length === 0 && (
-              <p className="room-empty">
+              <p className="mb-6 text-[13.5px] leading-[1.5] text-ink-soft">
                 No rooms in the last hour. Create one to get started.
               </p>
             )}
             {!roomsLoading && !roomsError && rooms.length > 0 && (
-              <div className="room-list">
+              <div className="mb-7 flex flex-col gap-[10px]">
                 {rooms.map((room) => (
                   <button
                     key={room.id}
                     type="button"
-                    className="room-card"
+                    className={CARD_ROW}
                     onClick={() => startJoin(room)}
                   >
-                    <div className="room-tag tag-land">{room.icon}</div>
-                    <div className="room-info">
-                      <p className="room-name">
+                    <div className={ROOM_TAG}>{room.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className={ROOM_NAME}>
                         {room.code} · {room.themeName}
                       </p>
-                      <p className="room-meta">{formatAge(room.createdAtMs)}</p>
+                      <p className={ROOM_META}>{formatAge(room.createdAtMs)}</p>
                     </div>
-                    <div className="room-count">
+                    <div className="font-mono text-xs whitespace-nowrap text-ink-soft">
                       {room.playerCount}{" "}
                       {room.playerCount === 1 ? "player" : "players"}
                     </div>
@@ -429,38 +502,50 @@ export default function CommonsApp() {
       )}
 
       {screen === "create" && (
-        <div className="screen active">
-          <div className="entry-header">
-            <button type="button" className="back-link" onClick={goMain}>
+        <div className="flex flex-col">
+          <div className="px-6 pt-5">
+            <button
+              type="button"
+              className="flex cursor-pointer items-center gap-[6px] border-none bg-transparent px-0 pt-[6px] pb-[18px] font-mono text-xs text-ink-soft"
+              onClick={goMain}
+            >
               ← Back
             </button>
           </div>
-          <div className="entry-body">
-            <h2 className="entry-title">Create a room</h2>
-            <p className="entry-sub">
+          <div className="flex flex-1 flex-col px-6 pb-6">
+            <h2 className="mb-[6px] font-display text-2xl font-semibold">
+              Create a room
+            </h2>
+            <p className="mb-7 text-[13.5px] text-ink-soft">
               Pick a theme, then share the short room code with your group.
             </p>
 
-            <label className="field-label">Theme</label>
-            <div className="team-picker">
+            <label className={FIELD_LABEL}>Theme</label>
+            <div className="mb-7 flex flex-col gap-[10px]">
               {THEME_LIST.map((theme) => (
                 <button
                   key={theme.id}
                   type="button"
-                  className={`team-opt${selectedThemeId === theme.id ? " selected theme-selected" : ""}`}
+                  className={`${OPT_CARD}${
+                    selectedThemeId === theme.id
+                      ? " border-forest bg-forest-line"
+                      : ""
+                  }`}
                   onClick={() => setSelectedThemeId(theme.id)}
                 >
-                  <span className="team-opt-name">
+                  <span className="text-[14.5px] font-semibold">
                     {theme.icon} {theme.name}
                   </span>
-                  <span className="team-opt-goal">{theme.blurb}</span>
+                  <span className="text-[12.5px] text-ink-soft">
+                    {theme.blurb}
+                  </span>
                 </button>
               ))}
             </div>
 
-            {loadError && <p className="load-error">{loadError}</p>}
+            {loadError && <p className={LOAD_ERROR}>{loadError}</p>}
 
-            <div className="entry-footer">
+            <div className="mt-auto">
               <button
                 type="button"
                 className="btn btn-primary"
@@ -475,20 +560,24 @@ export default function CommonsApp() {
       )}
 
       {screen === "entry" && selectedRoom && (
-        <div className="screen active">
-          <div className="entry-header">
-            <button type="button" className="back-link" onClick={goMain}>
+        <div className="flex flex-col">
+          <div className="px-6 pt-5">
+            <button
+              type="button"
+              className="flex cursor-pointer items-center gap-[6px] border-none bg-transparent px-0 pt-[6px] pb-[18px] font-mono text-xs text-ink-soft"
+              onClick={goMain}
+            >
               ← Back
             </button>
-            <div className="context-card">
-              <div className="room-tag tag-land">{selectedRoom.icon}</div>
-              <div className="room-info">
-                <p className="room-name">
+            <div className="card mb-7 flex items-center gap-3 px-4 py-[14px]">
+              <div className={ROOM_TAG}>{selectedRoom.icon}</div>
+              <div className="min-w-0 flex-1">
+                <p className={ROOM_NAME}>
                   {entryMode === "create"
                     ? `Room ${selectedRoom.code} ready`
                     : `Joining ${selectedRoom.code}`}
                 </p>
-                <p className="room-meta">
+                <p className={ROOM_META}>
                   {selectedRoom.themeName}
                   {entryMode === "join"
                     ? ` · ${selectedRoom.playerCount} players`
@@ -497,18 +586,20 @@ export default function CommonsApp() {
               </div>
             </div>
           </div>
-          <div className="entry-body">
-            <h2 className="entry-title">Who&apos;s joining?</h2>
-            <p className="entry-sub">
+          <div className="flex flex-1 flex-col px-6 pb-6">
+            <h2 className="mb-[6px] font-display text-2xl font-semibold">
+              Who&apos;s joining?
+            </h2>
+            <p className="mb-7 text-[13.5px] text-ink-soft">
               Pick a name, a mark, and a visible team. Your hidden role is
               assigned privately when you enter.
             </p>
 
-            <label className="field-label" htmlFor="name-input">
+            <label className={FIELD_LABEL} htmlFor="name-input">
               Your name
             </label>
             <input
-              className="name-input"
+              className="mb-6 w-full rounded-[10px] border border-line bg-card px-[14px] py-[13px] font-sans text-base text-ink focus:border-clay-deep focus:outline-none"
               id="name-input"
               type="text"
               placeholder="e.g. Priya"
@@ -517,28 +608,40 @@ export default function CommonsApp() {
               onChange={(e) => setName(e.target.value)}
             />
 
-            <label className="field-label">Visible team</label>
-            <div className="team-picker">
+            <label className={FIELD_LABEL}>Visible team</label>
+            <div className="mb-7 flex flex-col gap-[10px]">
               {(["red", "blue"] as const).map((id) => (
                 <button
                   key={id}
                   type="button"
-                  className={`team-opt team-opt-${id}${team === id ? " selected" : ""}`}
+                  className={`${OPT_CARD}${
+                    team === id
+                      ? id === "red"
+                        ? " border-rust bg-team-red-soft"
+                        : " border-team-blue bg-team-blue-soft"
+                      : ""
+                  }`}
                   onClick={() => setTeam(id)}
                 >
-                  <span className="team-opt-name">{TEAMS[id].name}</span>
-                  <span className="team-opt-goal">{TEAMS[id].goalLabel}</span>
+                  <span className="text-[14.5px] font-semibold">
+                    {TEAMS[id].name}
+                  </span>
+                  <span className="text-[12.5px] text-ink-soft">
+                    {TEAMS[id].goalLabel}
+                  </span>
                 </button>
               ))}
             </div>
 
-            <label className="field-label">Pick a mark</label>
-            <div className="emoji-grid">
+            <label className={FIELD_LABEL}>Pick a mark</label>
+            <div className="mb-6 grid grid-cols-6 gap-2">
               {EMOJI_OPTIONS.map((option) => (
                 <button
                   key={option}
                   type="button"
-                  className={`emoji-opt${emoji === option ? " selected" : ""}`}
+                  className={`flex aspect-square cursor-pointer items-center justify-center rounded-[10px] border border-line bg-card text-xl${
+                    emoji === option ? " border-forest bg-forest-line" : ""
+                  }`}
                   onClick={() => setEmoji(option)}
                 >
                   {option}
@@ -546,9 +649,9 @@ export default function CommonsApp() {
               ))}
             </div>
 
-            {loadError && <p className="load-error">{loadError}</p>}
+            {loadError && <p className={LOAD_ERROR}>{loadError}</p>}
 
-            <div className="entry-footer">
+            <div className="mt-auto">
               <button
                 type="button"
                 className="btn btn-primary"
@@ -568,27 +671,136 @@ export default function CommonsApp() {
         hiddenRole &&
         categories &&
         starter && (
-          <div className="screen active">
-            <div className="stage-header">
-              <div className="player-chip">
-                <div className="avatar">{emoji ?? "🙂"}</div>
-                <span>{name || "Player"}</span>
-              </div>
-              <div className="room-pill">{roomLabel}</div>
-            </div>
-            <div className="stage-body">
-              <div className={`team-badge team-badge-${teamInfo.id}`}>
-                <span className="team-badge-name">{teamInfo.name}</span>
-                <span className="team-badge-goal">
-                  Promotes {teamInfo.goalLabel}
-                </span>
+          <div className="relative flex h-[min(860px,calc(100dvh-64px))] max-h-[min(860px,calc(100dvh-64px))] flex-col max-[480px]:h-dvh max-[480px]:max-h-dvh">
+            <div className="flex shrink-0 flex-col gap-[10px] border-b border-line px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2 rounded-[20px] border border-line bg-card py-[5px] pr-3 pl-[5px]">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-forest-line text-[13px]">
+                    {emoji ?? "🙂"}
+                  </div>
+                  <span className="text-[12.5px] font-medium">
+                    {name || "Player"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={`inline-flex max-w-[220px] cursor-pointer items-center gap-[6px] rounded-[20px] border border-dashed py-[5px] pr-2 pl-[10px] font-sans text-inherit shadow-[0_0_0_2px_var(--tint-clay-ring)] transition-[border-color,box-shadow,transform] duration-150 hover:border-solid hover:shadow-[0_0_0_3px_var(--tint-clay-ring-strong)] active:scale-[0.98] ${
+                    teamInfo.id === "red"
+                      ? "bg-team-red-soft border-team-red-line"
+                      : "bg-team-blue-soft border-team-blue-line"
+                  } ${roleOpen ? "border-solid" : ""}`}
+                  onClick={() => setRoleOpen((open) => !open)}
+                  aria-expanded={roleOpen}
+                  aria-controls="role-panel"
+                >
+                  <span className="min-w-0 truncate text-[11.5px] font-semibold">
+                    {teamInfo.id === "red" ? "Red" : "Blue"} ·{" "}
+                    {hiddenRole.role_name}
+                  </span>
+                  <span
+                    className="shrink-0 rounded-full bg-[var(--tint-card-bright)] px-[6px] py-[2px] font-mono text-[9px] tracking-[0.06em] text-clay-deep uppercase"
+                    aria-hidden
+                  >
+                    {roleOpen ? "Hide" : "Role"}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-ink-soft" aria-hidden>
+                    {roleOpen ? "▴" : "▾"}
+                  </span>
+                </button>
               </div>
 
-              <div className="role-card">
-                <p className="role-eyebrow">Private · hidden role</p>
-                <h3 className="role-name">{hiddenRole.role_name}</h3>
-                <p className="role-desc">{hiddenRole.description}</p>
-                <p className="role-rule">
+              <div className="flex items-center gap-2">
+                <div
+                  className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+                  role="group"
+                  aria-label="City totals"
+                >
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      className={`inline-flex shrink-0 cursor-pointer items-baseline gap-[3px] rounded-lg border border-line bg-card px-[7px] py-1 font-mono text-inherit transition-colors hover:border-clay-deep ${scoreChipTint(scoreTeamOf(cat.id))}`}
+                      title={cat.blurb}
+                      aria-expanded={scoreInfoOpen}
+                      aria-controls="scoreboard-tip"
+                      onClick={() => setScoreInfoOpen((open) => !open)}
+                    >
+                      <span className="text-[9.5px] tracking-[0.02em] text-ink-soft uppercase">
+                        {SCORE_ABBR[cat.id]}
+                      </span>
+                      <span
+                        className={`text-[11.5px] font-bold ${scoreValueTint(scoreTeamOf(cat.id))}`}
+                      >
+                        {categories[cat.id] > 0 ? "+" : ""}
+                        {categories[cat.id]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {scoreInfoOpen && (
+                <p
+                  className="mb-1 rounded-lg bg-paper-deep px-3 py-[10px] text-xs leading-[1.45] text-ink-soft"
+                  id="scoreboard-tip"
+                >
+                  Red score = Jobs + Housing. Blue score = Accessibility +
+                  Climate. Cost is shared.
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div
+                  className="chip"
+                  aria-label={`Discussion timer ${formatTimer(secondsLeft ?? scenario.discussion_seconds)}`}
+                >
+                  <span aria-hidden>⏱</span>
+                  <span>
+                    {formatTimer(secondsLeft ?? scenario.discussion_seconds)}
+                  </span>
+                </div>
+                <div className="chip">
+                  <span aria-hidden>#</span>
+                  <span>{selectedRoom?.code}</span>
+                </div>
+                <button
+                  type="button"
+                  className="chip cursor-pointer transition-colors hover:border-clay-deep"
+                  onClick={() => setRosterOpen(true)}
+                  aria-label={`Open players list, ${roster.length} in room`}
+                >
+                  <span aria-hidden>👥</span>
+                  <span>
+                    {roster.length}{" "}
+                    {roster.length === 1 ? "player" : "players"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {roleOpen && (
+              <button
+                type="button"
+                className="block w-full shrink-0 cursor-pointer border-0 border-b border-dashed border-clay-deep bg-card px-6 pt-[14px] pb-4 text-left font-sans text-inherit transition-colors duration-150 hover:bg-[var(--tint-clay-hover)]"
+                id="role-panel"
+                onClick={() => setRoleOpen(false)}
+                aria-label="Hide hidden role details"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="label-mono m-0 text-clay-deep">
+                    Private · hidden role
+                  </p>
+                  <span className="whitespace-nowrap font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
+                    Tap to hide <span aria-hidden>▴</span>
+                  </span>
+                </div>
+                <h3 className="mb-2 font-display text-lg font-semibold">
+                  {hiddenRole.role_name}
+                </h3>
+                <p className="mb-[10px] text-sm leading-[1.5]">
+                  {hiddenRole.description}
+                </p>
+                <p className="mb-2 text-[12.5px] leading-[1.45] text-ink-soft">
                   You score 1 point at end of game if{" "}
                   {roleRuleLabel(
                     hiddenRole.target_category,
@@ -597,67 +809,57 @@ export default function CommonsApp() {
                   )}
                   .
                 </p>
-              </div>
+                <p className="text-xs text-ink-soft">
+                  {teamInfo.name} promotes {teamInfo.goalLabel}.
+                </p>
+              </button>
+            )}
 
-              <p className="section-label">City categories</p>
-              <div className="category-strip">
-                {CATEGORIES.map((cat) => (
-                  <div key={cat.id} className="category-chip" title={cat.blurb}>
-                    <span className="category-name">{cat.name}</span>
-                    <span className="category-value">
-                      {categories[cat.id] > 0 ? "+" : ""}
-                      {categories[cat.id]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p className="category-note">
-                Red score = Jobs + Housing · Blue score = Accessibility + Climate
-                · Cost is shared
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-[18px] pb-6">
+              <p className="label-mono mb-[10px] text-rust">
+                Round {scenario.round_order}
               </p>
-
-              <p className="stage-eyebrow">
-                Round {scenario.round_order} of 2 · from CSV
-              </p>
-              <h2 className="scenario-title">{scenario.title}</h2>
-              <div className="scenario-meta">
-                <span className="meta-tag">
+              <h2 className="mb-4 font-display text-[26px] leading-[1.15] font-semibold">
+                {scenario.title}
+              </h2>
+              <div className="mb-5 flex flex-wrap gap-2">
+                <span className="rounded-md bg-forest-line px-[10px] py-[5px] font-mono text-[11px] text-forest">
                   Discuss {formatDiscussion(scenario.discussion_seconds)}
                 </span>
               </div>
-              <div className="scenario-brief">
-                <p>
+              <div className="card mb-5 p-5">
+                <p className="mb-[14px] text-[14.5px] leading-[1.7] text-ink last:mb-0">
                   <strong>Problem.</strong> {scenario.problem}
                 </p>
-                <p>
+                <p className="mb-[14px] text-[14.5px] leading-[1.7] text-ink last:mb-0">
                   <strong>Team task.</strong> {scenario.team_task}
                 </p>
               </div>
 
-              <p className="section-label">Your team&apos;s starter proposal</p>
-              <div className="proposal-card">
-                <p className="proposal-text">{starter.proposal_text}</p>
-                <div className="proposal-deltas">
+              <p className="label-mono mb-3">Your team&apos;s starter proposal</p>
+              <div className="card mb-2 p-4">
+                <p className="mb-[14px] text-sm leading-[1.65]">
+                  {starter.proposal_text}
+                </p>
+                <div className="mb-3 grid grid-cols-5 gap-[6px]">
                   {DELTA_KEYS.map((key) => (
-                    <div key={key} className="proposal-delta">
-                      <span className="category-name">
+                    <div
+                      key={key}
+                      className="rounded-lg bg-paper-deep px-1 py-2 text-center"
+                    >
+                      <span className="mb-1 block font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
                         {CATEGORIES.find((c) => c.id === key)?.name}
                       </span>
-                      <span className="category-value">
+                      <span className="block font-display text-base font-semibold">
                         {formatDelta(starter[key])}
                       </span>
                     </div>
                   ))}
                 </div>
-                <p className="proposal-note">
-                  Read-only for now. Editing and submit arrive in Epic 4.
-                </p>
               </div>
             </div>
-            <div className="stage-footer">
-              <p className="footer-note">
-                Round 2 lives in CSV already; advancing rounds comes later.
-              </p>
+
+            <div className="shrink-0 border-t border-line bg-paper px-6 pt-3 pb-4">
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -667,62 +869,61 @@ export default function CommonsApp() {
               </button>
             </div>
 
-            <button
-              type="button"
-              className="roster-bubble"
-              onClick={() => setRosterOpen(true)}
-              aria-label="Open player roster"
-            >
-              <span className="roster-bubble-line roster-bubble-red">
-                {redCount} Red
-              </span>
-              <span className="roster-bubble-line roster-bubble-blue">
-                {blueCount} Blue
-              </span>
-            </button>
-
             {rosterOpen && (
               <div
-                className="roster-modal-backdrop"
+                className="absolute inset-0 z-20 flex items-start justify-end bg-[rgba(35,41,31,0.35)] px-[14px] pt-16 pb-4"
                 onClick={() => setRosterOpen(false)}
                 role="presentation"
               >
                 <div
-                  className="roster-modal"
+                  className="w-[min(100%,320px)] max-h-[calc(100%-80px)] overflow-auto rounded-2xl border border-line bg-paper px-4 pt-[18px] pb-5"
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="roster-modal-title"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="roster-modal-header">
-                    <h2 id="roster-modal-title" className="roster-modal-title">
-                      Players · {roster.length}
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h2
+                      id="roster-modal-title"
+                      className="font-display text-xl font-semibold"
+                    >
+                      In this room
                     </h2>
                     <button
                       type="button"
-                      className="roster-modal-close"
+                      className="cursor-pointer border-none bg-transparent p-1 font-mono text-[11px] tracking-[0.06em] text-ink-soft uppercase underline"
                       onClick={() => setRosterOpen(false)}
                     >
                       Close
                     </button>
                   </div>
-                  <p className="roster-modal-summary">
-                    <span className="roster-bubble-red">{redCount} Red</span>
+                  <p className="mb-4 text-[13px] text-ink-soft">
+                    <span className="text-rust">{redCount} Red</span>
                     {" · "}
-                    <span className="roster-bubble-blue">{blueCount} Blue</span>
+                    <span className="text-team-blue">{blueCount} Blue</span>
                   </p>
-                  <div className="roster-list">
+                  <div className="flex flex-col gap-2">
                     {roster.length === 0 && (
-                      <p className="room-empty">Waiting for players…</p>
+                      <p className="text-[13.5px] leading-[1.5] text-ink-soft">
+                        Waiting for players…
+                      </p>
                     )}
                     {roster.map((player) => (
                       <div
                         key={player.id}
-                        className={`roster-row roster-${player.team}`}
+                        className={`flex items-center gap-[10px] rounded-[10px] border-t border-r border-b border-l-[3px] border-t-line border-r-line border-b-line bg-card px-3 py-[10px] ${
+                          player.team === "red"
+                            ? "border-l-rust"
+                            : "border-l-team-blue"
+                        }`}
                       >
-                        <span className="roster-emoji">{player.emoji}</span>
-                        <span className="roster-name">{player.displayName}</span>
-                        <span className="roster-team">
+                        <span className="text-lg leading-none">
+                          {player.emoji}
+                        </span>
+                        <span className="flex-1 text-sm font-semibold">
+                          {player.displayName}
+                        </span>
+                        <span className="font-mono text-[11px] text-ink-soft">
                           {TEAMS[player.team].name}
                         </span>
                       </div>

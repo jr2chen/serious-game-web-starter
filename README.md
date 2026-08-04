@@ -1,4 +1,4 @@
-# Commons — Epic 3d (Rejoin after refresh)
+# Commons — Tailwind UI migration (pre–Epic 4)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -13,28 +13,21 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 ## How we got here
 
 **Epic 0–2** — UI shell, teams/roles, CSV content  
-**Epic 3a** — Firebase wiring + setup docs  
-**Epic 3b** — create/join rooms (last hour list)  
-**Epic 3c** — live player roster + private hidden-role secrets  
-**Epic 3d (current)** — rejoin button after refresh if you still have a seat
+**Epic 3** — Firebase rooms, roster, rejoin  
+**This slice** — UI styles moved to Tailwind (so markup and look stay in one place)  
+**Next** — Epic 4 (editable team proposals)
 
 ---
 
 ## User flow (this slice)
 
-```
-Main (rooms from last hour)
-  ├─ [Rejoin CODE] if you refreshed while still in a room
-  ├─ Join room ──► Name + emoji + team ──► Stage (+ live roster)
-  └─ Create room ──► Pick theme ──► Name + emoji + team ──► Stage (+ live roster)
-```
+Same join/create/rejoin flow. The stage header is three pinned rows:
 
-On stage:
+1. **Name · Role** — player chip + **Red · Role ▾** badge (tap to expand/collapse the private role card)
+2. **City scores** — horizontal chips (`Jobs 0`, `Housing 0`, …) tinted **red** (Jobs/Housing) or **blue** (Accessibility/Climate); Cost stays neutral since it's shared. Tap **any** chip to reveal the scoring-rule explanation
+3. **Timer · Room code · Players** — a mock **⏱ mm:ss** discussion countdown, the room code, and a **players** chip that opens the live roster
 
-- **Players bubble** shows Red/Blue counts; tap it for the full live roster
-- Your **hidden role** stays private (`secrets/{yourUid}`)
-- Refreshing the page returns you to Main with a **Rejoin** button (same name, team, role) — it does **not** auto-drop you onto stage
-- **Leave room** clears the rejoin offer for this browser tab
+The timer is client-only: it resets to the full time on join/rejoin, is not synced across players, and isn't persisted — a placeholder until real facilitator timing lands later.
 
 ---
 
@@ -152,7 +145,17 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | [`lib/content/`](lib/content/) | CSV parse + load |
 | [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
-| [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Screens |
+| [`components/CommonsApp.tsx`](components/CommonsApp.tsx) | Screens (Tailwind utilities in JSX) |
+| [`app/globals.css`](app/globals.css) | Color tokens + a few shared recipes (`.btn`, `.card`, `.chip`) |
+| [`app/layout.tsx`](app/layout.tsx) | Fonts + page shell |
+| [`next.config.ts`](next.config.ts) | Turbopack filesystem cache off in dev (avoids stale CSS) |
+
+### Styling
+
+- Prefer **Tailwind utility classes in the JSX** for layout and one-off visuals.
+- Reuse the small recipes in [`app/globals.css`](app/globals.css) (`.btn`, `.card`, `.chip`, `.label-mono`) when a widget appears in several places.
+- Change the palette in the `:root` block of `globals.css` — those tokens feed Tailwind (`bg-forest`, `text-ink-soft`, etc.).
+- Avoid adding large new custom CSS files; keep styles next to the markup so renames can’t silently drop styling.
 
 ---
 
@@ -172,7 +175,6 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Explicitly not in this slice
 
-- Auto-resume straight onto stage (you get a Rejoin button instead)  
 - Editable team proposals (Epic 4)  
 - Multiple themes  
 - Advancing to Round 2 in the UI  
@@ -183,4 +185,4 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Suggested next increment
 
-**Epic 4:** editable private team proposals (shared text + −2…+2 deltas + submit).
+**Epic 4a:** private team proposal draft UI — shared text box + five −2…+2 steppers, prefilled from starter CSV (local/team write still thin).
