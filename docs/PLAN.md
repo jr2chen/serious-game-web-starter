@@ -97,7 +97,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 1 — Teams, roles, categories on stage (current)
+## Epic 1 — Teams, roles, categories on stage (done)
 
 **Goal:** Avalon feel visible without multiplayer.
 
@@ -114,9 +114,25 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 2 — CSV content (no multiplayer)
+## Epic 2 — CSV content (current)
 
-Load scenarios + roles from CSV; stage content no longer hard-coded in components.
+**Goal:** Workshop content lives in editable CSV files, not React components.
+
+**Stories:**
+- As an editor, I can change Round 1 / Round 2 scenarios in `content/scenarios.csv`
+- As an editor, I can change hidden roles in `content/roles.csv`
+- As an editor, I can change Red/Blue starter proposals in `content/starter_proposals.csv`
+- As a player, the stage loads **Round 1** from CSV (title, problem, team task, discussion time)
+- As a player, I see my team’s **starter proposal** (read-only) with suggested −2…+2 deltas
+- As a developer, missing required CSV fields return a clear error
+
+**Keep simple:** No editable proposal UI yet (Epic 4). Round 2 is in CSV but not advanced to in-app. No Firebase.
+
+**Sample content locked for V1:**
+- Round 1: Downtown Redevelopment (`downtown_redevelopment`)
+- Round 2: Expanding Transportation Access (`transportation_access`)
+
+**Done when:** Editing CSV changes what the stage shows; starter proposals load per team.
 
 ---
 
@@ -128,7 +144,7 @@ Create/join with short codes; live roster; private roles; Firebase + anonymous a
 
 ## Epic 4 — Team proposal drafting
 
-Private Red/Blue draft: one shared text box, five suggested category steppers, Submit. Last write wins. Opposing draft hidden until reveal.
+Private Red/Blue draft: one shared text box, five suggested category steppers (−2…+2), Submit. Prefill from starter proposal CSV. Last write wins. Opposing draft hidden until reveal.
 
 ---
 
@@ -152,11 +168,11 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 
 ## Suggested tiny build order
 
-1. **Epic 1** — team pick + role + five categories (this slice)
-2. Epic 2 — CSV scenarios/roles
+1. Epic 1 — team pick + role + five categories (done)
+2. **Epic 2** — CSV scenarios / roles / starter proposals (this slice)
 3. Epic 3a — create/join + roster
 4. Epic 3b — role privacy across devices
-5. Epic 4 — private team proposals
+5. Epic 4 — editable private team proposals
 6. Epic 5 — reveal + facilitator apply deltas
 7. Epic 6 — derived scores + next/end
 8. Epic 7 — polish
