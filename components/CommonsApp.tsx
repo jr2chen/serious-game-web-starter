@@ -12,7 +12,10 @@ import {
   getStarterProposal,
   listRooms,
   loadMySeat,
+  saveTeamProposal,
+  seedTeamProposal,
   watchRoomPlayers,
+  watchTeamProposal,
 } from "@/lib/api/client";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import type {
@@ -47,8 +50,20 @@ const DELTA_KEYS: CategoryId[] = [
   "cost",
 ];
 
+const EMPTY_DELTAS: Record<CategoryId, number> = {
+  jobs: 0,
+  housing: 0,
+  accessibility: 0,
+  climate: 0,
+  cost: 0,
+};
+
 function formatDelta(value: number): string {
   return value > 0 ? `+${value}` : String(value);
+}
+
+function clampProposalDelta(value: number): number {
+  return Math.max(-2, Math.min(2, Math.round(value)));
 }
 
 function formatDiscussion(seconds: number): string {
@@ -127,6 +142,12 @@ export default function CommonsApp() {
   const [team, setTeam] = useState<TeamId | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [starter, setStarter] = useState<StarterProposal | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [draftDeltas, setDraftDeltas] =
+    useState<Record<CategoryId, number>>(EMPTY_DELTAS);
+  const [draftUpdatedBy, setDraftUpdatedBy] = useState<string | null>(null);
+  const [draftUpdatedAtMs, setDraftUpdatedAtMs] = useState<number | null>(null);
+  const [submittingProposal, setSubmittingProposal] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
@@ -225,6 +246,46 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom]);
 
+  /** Live team proposal — remote Submit overwrites local text + deltas. */
+  useEffect(() => {
+    if (screen !== "stage" || !selectedRoom || !team) return;
+
+    let active = true;
+    let unsub: (() => void) | undefined;
+
+    void watchTeamProposal(
+      selectedRoom.code,
+      team,
+      (draft) => {
+        if (!active || !draft) return;
+        setDraftText(draft.proposal_text);
+        setDraftDeltas({
+          jobs: draft.jobs,
+          housing: draft.housing,
+          accessibility: draft.accessibility,
+          climate: draft.climate,
+          cost: draft.cost,
+        });
+        setDraftUpdatedBy(draft.updatedByName || null);
+        setDraftUpdatedAtMs(draft.updatedAtMs);
+      },
+      (error) => {
+        if (active) setLoadError(error.message);
+      },
+    ).then((unsubscribe) => {
+      if (!active) {
+        unsubscribe();
+        return;
+      }
+      unsub = unsubscribe;
+    });
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [screen, selectedRoom, team]);
+
   /** Mock countdown only — not synced across players or persisted. */
   useEffect(() => {
     if (screen !== "stage") return;
@@ -247,6 +308,11 @@ export default function CommonsApp() {
     setTeam(null);
     setScenario(null);
     setStarter(null);
+    setDraftText("");
+    setDraftDeltas(EMPTY_DELTAS);
+    setDraftUpdatedBy(null);
+    setDraftUpdatedAtMs(null);
+    setSubmittingProposal(false);
     setSecondsLeft(null);
     setHiddenRole(null);
     setCategories(null);
@@ -315,11 +381,26 @@ export default function CommonsApp() {
         team,
         role,
       });
+      const seeded = await seedTeamProposal({
+        roomCode: selectedRoom.code,
+        starter: proposal,
+        displayName,
+      });
 
       setName(displayName);
       setEmoji(mark);
       setScenario(nextScenario);
       setStarter(proposal);
+      setDraftText(seeded.proposal_text);
+      setDraftDeltas({
+        jobs: seeded.jobs,
+        housing: seeded.housing,
+        accessibility: seeded.accessibility,
+        climate: seeded.climate,
+        cost: seeded.cost,
+      });
+      setDraftUpdatedBy(seeded.updatedByName || null);
+      setDraftUpdatedAtMs(seeded.updatedAtMs);
       setHiddenRole(role);
       setCategories(totals);
       setSecondsLeft(nextScenario.discussion_seconds);
@@ -356,6 +437,11 @@ export default function CommonsApp() {
         nextScenario.scenario_id,
         seat.player.team,
       );
+      const seeded = await seedTeamProposal({
+        roomCode: room.code,
+        starter: proposal,
+        displayName: seat.player.displayName,
+      });
 
       setSelectedRoom(room);
       setName(seat.player.displayName);
@@ -363,6 +449,16 @@ export default function CommonsApp() {
       setTeam(seat.player.team);
       setScenario(nextScenario);
       setStarter(proposal);
+      setDraftText(seeded.proposal_text);
+      setDraftDeltas({
+        jobs: seeded.jobs,
+        housing: seeded.housing,
+        accessibility: seeded.accessibility,
+        climate: seeded.climate,
+        cost: seeded.cost,
+      });
+      setDraftUpdatedBy(seeded.updatedByName || null);
+      setDraftUpdatedAtMs(seeded.updatedAtMs);
       setHiddenRole(seat.role);
       setCategories(totals);
       setSecondsLeft(nextScenario.discussion_seconds);
@@ -376,6 +472,35 @@ export default function CommonsApp() {
     } finally {
       setRejoining(false);
     }
+  }
+
+  async function submitProposalRevision() {
+    if (!selectedRoom || !team || !scenario) return;
+    setSubmittingProposal(true);
+    setLoadError(null);
+    try {
+      await saveTeamProposal({
+        roomCode: selectedRoom.code,
+        team,
+        scenarioId: scenario.scenario_id,
+        proposalText: draftText,
+        deltas: draftDeltas,
+        displayName: name.trim() || "Player",
+      });
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not submit proposal",
+      );
+    } finally {
+      setSubmittingProposal(false);
+    }
+  }
+
+  function nudgeDelta(key: CategoryId, step: number) {
+    setDraftDeltas((prev) => ({
+      ...prev,
+      [key]: clampProposalDelta(prev[key] + step),
+    }));
   }
 
   const teamInfo = team ? TEAMS[team] : null;
@@ -867,26 +992,80 @@ export default function CommonsApp() {
                 </p>
               </div>
 
-              <p className="label-mono mb-3">Your team&apos;s starter proposal</p>
+              <p className="label-mono mb-2">Your team&apos;s proposal</p>
+              <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
+                Shared with your team only. Prefer{" "}
+                <strong>one person revising at a time</strong> — Submit
+                overwrites the text and all five numbers for everyone (last
+                write wins).
+              </p>
               <div className="card mb-2 p-4">
-                <p className="mb-[14px] text-sm leading-[1.65]">
-                  {starter.proposal_text}
-                </p>
-                <div className="mb-3 grid grid-cols-5 gap-[6px]">
+                <label className={FIELD_LABEL} htmlFor="proposal-text">
+                  Proposal text
+                </label>
+                <textarea
+                  id="proposal-text"
+                  className="mb-4 min-h-[280px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  maxLength={2000}
+                  rows={10}
+                />
+
+                <p className={FIELD_LABEL}>Suggested category changes</p>
+                <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto pb-1">
                   {DELTA_KEYS.map((key) => (
                     <div
                       key={key}
-                      className="rounded-lg bg-paper-deep px-1 py-2 text-center"
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-deep px-2 py-1.5"
                     >
-                      <span className="mb-1 block font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
-                        {CATEGORIES.find((c) => c.id === key)?.name}
+                      <span className="font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
+                        {SCORE_ABBR[key]}
                       </span>
-                      <span className="block font-display text-base font-semibold">
-                        {formatDelta(starter[key])}
+                      <button
+                        type="button"
+                        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                        aria-label={`Decrease ${key}`}
+                        onClick={() => nudgeDelta(key, -1)}
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center font-display text-sm font-semibold">
+                        {formatDelta(draftDeltas[key])}
                       </span>
+                      <button
+                        type="button"
+                        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                        aria-label={`Increase ${key}`}
+                        onClick={() => nudgeDelta(key, 1)}
+                      >
+                        +
+                      </button>
                     </div>
                   ))}
                 </div>
+
+                {draftUpdatedBy && (
+                  <p className="mb-3 text-[12px] text-ink-soft">
+                    Last revision by <strong>{draftUpdatedBy}</strong>
+                    {draftUpdatedAtMs
+                      ? ` · ${new Date(draftUpdatedAtMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                      : ""}
+                  </p>
+                )}
+
+                {loadError && screen === "stage" && (
+                  <p className={LOAD_ERROR}>{loadError}</p>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={submittingProposal || !draftText.trim()}
+                  onClick={() => void submitProposalRevision()}
+                >
+                  {submittingProposal ? "Submitting…" : "Submit revision"}
+                </button>
               </div>
             </div>
 

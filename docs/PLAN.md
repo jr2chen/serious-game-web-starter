@@ -184,7 +184,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** Two devices in one room see each other on the roster; each only sees their own role card.
 
-### Slice D — Rejoin after refresh (current)
+### Slice D — Rejoin after refresh (done)
 
 **Goal:** Refreshing the tab does not trap you out of a room you still belong to.
 
@@ -199,9 +199,20 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 4 — Team proposal drafting
+## Epic 4 — Team proposal drafting (current)
 
-Private Red/Blue draft: one shared text box, five suggested category steppers (−2…+2), Submit. Prefill from starter proposal CSV. Last write wins. Opposing draft hidden until reveal.
+**Goal:** Each team shares one editable draft; Submit overwrites for everyone on that team.
+
+**Stories:**
+- As a player, I see my team’s proposal prefilled from CSV (text + five −2…+2 deltas)
+- As a player, I can edit the text and nudge each category, then **Submit revision**
+- As a teammate, my screen updates automatically when someone Submits (last write wins)
+- As a player, I am reminded to prefer **one reviser at a time**
+- As the opposing team, I cannot read the other draft yet (reveal is Epic 5)
+
+**Keep simple:** No live typing sync (only on Submit). No locking. No reveal UI.
+
+**Done when:** Two devices on the same team see Submit overwrite text + deltas; other team’s proposal stays private.
 
 ---
 
@@ -230,8 +241,8 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 3. **Epic 3a** — Firebase env + client wiring (done)
 4. Epic 3b — create/join + last-hour room list (done)
 5. Epic 3c — live roster + private role secrets (done)
-6. **Epic 3d** — rejoin button after refresh (this slice)
-7. Epic 4 — editable private team proposals
+6. Epic 3d — rejoin button after refresh (done)
+7. **Epic 4** — editable private team proposals (this slice)
 8. Epic 5 — reveal + facilitator apply deltas
 9. Epic 6 — derived scores + next/end
 10. Epic 7 — polish
