@@ -1,4 +1,4 @@
-# Commons — Tailwind UI migration (pre–Epic 4)
+# Commons — Epic 4 team proposal drafting
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -14,8 +14,9 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 **Epic 0–2** — UI shell, teams/roles, CSV content  
 **Epic 3** — Firebase rooms, roster, rejoin  
-**This slice** — UI styles moved to Tailwind; main screen shows a QR for the current URL  
-**Next** — Epic 4 (editable team proposals)
+**UI/UX improvements** — UI styles moved to Tailwind; main screen shows a QR for the current URL
+**This slice** — Epic 4: shared editable team proposal (Submit overwrites for teammates)  
+**Next** — Epic 5 (reveal both proposals + facilitator deltas)
 
 ---
 
@@ -23,25 +24,24 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 Same join/create/rejoin flow. On the **main** screen, a QR code encodes the current page URL so you can open the same preview, production, or local link on a phone. The stage header is three pinned rows:
 
-1. **Name · Role** — player chip + **Red · Role ▾** badge (tap to expand/collapse the private role card)
-2. **City scores** — horizontal chips (`Jobs 0`, `Housing 0`, …) tinted **red** (Jobs/Housing) or **blue** (Accessibility/Climate); Cost stays neutral since it's shared. Tap **any** chip to reveal the scoring-rule explanation
-3. **Timer · Room code · Players** — a mock **⏱ mm:ss** discussion countdown, the room code, and a **players** chip that opens the live roster
-
-The timer is client-only: it resets to the full time on join/rejoin, is not synced across players, and isn't persisted — a placeholder until real facilitator timing lands later.
+- Your team’s proposal starts from the CSV starter (text + five suggested changes)
+- Anyone on the team can edit the text and nudge each number up to **±4**, then tap **Submit revision**
+- Teammates’ screens update automatically when someone Submits (last write wins — prefer one reviser at a time)
+- The other team cannot see your draft yet
 
 ---
 
 ## Firebase setup (required)
 
 1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md)
-2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) (players + secrets paths)
+2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — includes the new `proposals/{red|blue}` path
 3. `cp .env.local.example .env.local` and paste web keys, then `npm run dev`
 
 Without `.env.local`, the main screen shows a configuration error instead of rooms.
 
-If Firestore is in **production mode**, publish rules from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) or create/join will be denied.
+If Firestore is in **production mode**, publish rules from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) or create/join/Submit will be denied.
 
-Room helpers: [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts), [`lib/firebase/players.ts`](lib/firebase/players.ts), [`lib/firebase/auth.ts`](lib/firebase/auth.ts).  
+Room helpers: [`lib/firebase/rooms.ts`](lib/firebase/rooms.ts), [`lib/firebase/players.ts`](lib/firebase/players.ts), [`lib/firebase/proposals.ts`](lib/firebase/proposals.ts), [`lib/firebase/auth.ts`](lib/firebase/auth.ts).  
 Session hint: [`lib/game/session.ts`](lib/game/session.ts) (tab `sessionStorage` for the active room code).
 
 ---
@@ -123,7 +123,7 @@ One row = one team’s starting draft for a scenario (Red or Blue).
 | `proposal_text` | Starting proposal wording | quote if it has commas |
 | `jobs` `housing` `accessibility` `climate` `cost` | Suggested effects | whole numbers from **-2 to +2** |
 
-These show as **read-only** on the stage in Epic 2. Players will edit/submit them in a later epic.
+These **prefill** the team’s shared draft when a room first needs one. Players edit and Submit on stage; each Submit overwrites the live draft for that team.
 
 ---
 
@@ -142,6 +142,7 @@ These show as **read-only** on the stage in Epic 2. Players will edit/submit the
 | [`lib/firebase/players.ts`](lib/firebase/players.ts) | Join as player, load my seat, live roster, private role |
 | [`lib/game/session.ts`](lib/game/session.ts) | Remember active room code in the browser tab |
 | [`lib/game/themes.ts`](lib/game/themes.ts) | Workshop themes (Municipal only for now) |
+| [`lib/firebase/proposals.ts`](lib/firebase/proposals.ts) | Ensure / submit / live-watch team draft |
 | [`lib/content/`](lib/content/) | CSV parse + load |
 | [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
@@ -175,14 +176,16 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Explicitly not in this slice
 
-- Editable team proposals (Epic 4)  
+- Revealing both proposals / opposing-team visibility (Epic 5)  
+- Facilitator judging or applying final −2…+2 totals  
+- Live keystroke sync (only **Submit** pushes to teammates)  
+- Proposal locking / turn-taking enforcement  
 - Multiple themes  
 - Advancing to Round 2 in the UI  
-- Facilitator judging  
 - Accounts or saved games across browsers  
 
 ---
 
 ## Suggested next increment
 
-**Epic 4a:** private team proposal draft UI — shared text box + five −2…+2 steppers, prefilled from starter CSV (local/team write still thin).
+**Epic 5a:** reveal both team proposals after drafting (read-only view for the room).

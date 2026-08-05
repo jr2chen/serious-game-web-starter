@@ -1,4 +1,5 @@
 import type {
+  CategoryId,
   CategoryTotals,
   HiddenRole,
   Room,
@@ -6,6 +7,7 @@ import type {
   Scenario,
   StarterProposal,
   TeamId,
+  TeamProposalDraft,
   ThemeId,
 } from "@/lib/game/types";
 import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
@@ -20,6 +22,11 @@ import {
   subscribeToRoomPlayers,
   type PlayerSeat,
 } from "@/lib/firebase/players";
+import {
+  ensureTeamProposal,
+  submitTeamProposal,
+  subscribeToTeamProposal,
+} from "@/lib/firebase/proposals";
 import type { Unsubscribe } from "firebase/firestore";
 
 /** Browser client for game content and rooms. */
@@ -67,6 +74,34 @@ export async function watchRoomPlayers(
   onError?: (error: Error) => void,
 ): Promise<Unsubscribe> {
   return subscribeToRoomPlayers(roomCode, onChange, onError);
+}
+
+export async function seedTeamProposal(input: {
+  roomCode: string;
+  starter: StarterProposal;
+  displayName: string;
+}): Promise<TeamProposalDraft> {
+  return ensureTeamProposal(input);
+}
+
+export async function saveTeamProposal(input: {
+  roomCode: string;
+  team: TeamId;
+  scenarioId: string;
+  proposalText: string;
+  deltas: Record<CategoryId, number>;
+  displayName: string;
+}): Promise<void> {
+  return submitTeamProposal(input);
+}
+
+export async function watchTeamProposal(
+  roomCode: string,
+  team: TeamId,
+  onChange: (draft: TeamProposalDraft | null) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToTeamProposal(roomCode, team, onChange, onError);
 }
 
 export async function getScenario(_roomId?: string): Promise<Scenario> {

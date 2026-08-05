@@ -16,11 +16,12 @@ Tick items off as you go (`[ ]` → `[x]`).
 | `rooms/{code}` | Any signed-in user (read/write) — lobby metadata |
 | `rooms/{code}/players/{uid}` | Everyone signed-in can **read**; only that uid can **write** |
 | `rooms/{code}/secrets/{uid}` | **Only that uid** can read/write (hidden role) |
+| `rooms/{code}/proposals/{team}` | Only players whose roster `team` matches (`red` / `blue`) |
 | Everything else | Denied |
 
 Anonymous Auth counts as signed in.
 
-**Important:** Republish rules after this Epic 3c change — player/secret paths were not covered before.
+**Important:** Republish rules after this Epic 4 change — the `proposals` path is new. Without it, Submit revision will fail.
 
 ---
 
@@ -31,6 +32,8 @@ Anonymous Auth counts as signed in.
 - [ ] **Publish**
 - [ ] Refresh the app, create/join a room, confirm the live roster updates
 - [ ] Confirm another device sees your name/team but **not** your hidden role card text from their own role UI only
+- [ ] On stage, edit + **Submit revision** — a teammate’s phone should update the shared draft automatically
+- [ ] Confirm the other team cannot read your proposal doc (opposing draft stays private until Epic 5)
 
 ---
 
@@ -48,6 +51,16 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == playerId;
     }
 
+    function myTeamInRoom(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid)).data.team;
+    }
+
+    function isTeammateProposal(roomId, teamId) {
+      return signedIn()
+        && (teamId == 'red' || teamId == 'blue')
+        && myTeamInRoom(roomId) == teamId;
+    }
+
     match /rooms/{roomId} {
       allow read, write: if signedIn();
     }
@@ -62,6 +75,10 @@ service cloud.firestore {
       allow read, write: if isSelf(playerId);
     }
 
+    match /rooms/{roomId}/proposals/{teamId} {
+      allow read, write: if isTeammateProposal(roomId, teamId);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
@@ -71,11 +88,12 @@ service cloud.firestore {
 
 ---
 
-## If roster or join fails
+## If roster, join, or proposal submit fails
 
 - [ ] Rules were **Published** (not draft)
 - [ ] Anonymous Auth is enabled
 - [ ] If Firestore asks for an index on `players.joinedAt`, follow the console link once
+- [ ] For proposal errors: confirm you are seated in that room with a matching team before Submit
 
 ---
 
@@ -90,4 +108,9 @@ rooms/{CODE}/players/{uid}          // public roster
 
 rooms/{CODE}/secrets/{uid}          // private role
   role_id, role_name, description, target_category, comparison, threshold
+
+rooms/{CODE}/proposals/{red|blue}   // shared team draft (last Submit wins)
+  team, scenario_id, proposal_text,
+  jobs, housing, accessibility, climate, cost,   // each −4…+4 (revision range)
+  updatedAt, updatedByUid, updatedByName
 ```

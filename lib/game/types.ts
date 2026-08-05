@@ -54,6 +54,21 @@ export type StarterProposal = {
   cost: number;
 };
 
+/** Live shared draft for one team in a room (last submit wins). */
+export type TeamProposalDraft = {
+  team: TeamId;
+  scenario_id: string;
+  proposal_text: string;
+  jobs: number;
+  housing: number;
+  accessibility: number;
+  climate: number;
+  cost: number;
+  updatedAtMs: number;
+  updatedByUid: string;
+  updatedByName: string;
+};
+
 export type Room = {
   /** Short join code; also used as the Firestore document id. */
   id: string;

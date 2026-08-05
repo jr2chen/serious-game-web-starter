@@ -9,6 +9,16 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == playerId;
     }
 
+    function myTeamInRoom(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid)).data.team;
+    }
+
+    function isTeammateProposal(roomId, teamId) {
+      return signedIn()
+        && (teamId == 'red' || teamId == 'blue')
+        && myTeamInRoom(roomId) == teamId;
+    }
+
     // Public room metadata (lobby list, theme, counts).
     match /rooms/{roomId} {
       allow read, write: if signedIn();
@@ -24,6 +34,11 @@ service cloud.firestore {
     // Private hidden role — only that player can read/write.
     match /rooms/{roomId}/secrets/{playerId} {
       allow read, write: if isSelf(playerId);
+    }
+
+    // Shared team draft — only that team's players (last Submit wins).
+    match /rooms/{roomId}/proposals/{teamId} {
+      allow read, write: if isTeammateProposal(roomId, teamId);
     }
 
     match /{document=**} {
