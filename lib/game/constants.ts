@@ -43,6 +43,9 @@ export const CATEGORIES: Category[] = [
   },
 ];
 
+/** Suggested category changes in a team's proposal revision may go up to ±4. */
+export const PROPOSAL_DELTA_LIMIT = 4;
+
 export const INITIAL_CATEGORY_TOTALS: CategoryTotals = {
   jobs: 0,
   housing: 0,

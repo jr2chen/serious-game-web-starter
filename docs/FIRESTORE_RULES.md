@@ -111,6 +111,6 @@ rooms/{CODE}/secrets/{uid}          // private role
 
 rooms/{CODE}/proposals/{red|blue}   // shared team draft (last Submit wins)
   team, scenario_id, proposal_text,
-  jobs, housing, accessibility, climate, cost,   // each −2…+2
+  jobs, housing, accessibility, climate, cost,   // each −4…+4 (revision range)
   updatedAt, updatedByUid, updatedByName
 ```

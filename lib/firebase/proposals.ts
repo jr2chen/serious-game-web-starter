@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { ensureAnonymousUser } from "@/lib/firebase/auth";
 import { getFirebaseDb } from "@/lib/firebase/client";
+import { PROPOSAL_DELTA_LIMIT } from "@/lib/game/constants";
 import type {
   CategoryId,
   StarterProposal,
@@ -29,7 +30,10 @@ const DELTA_KEYS: CategoryId[] = [
 
 function clampDelta(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(-2, Math.min(2, Math.round(value)));
+  return Math.max(
+    -PROPOSAL_DELTA_LIMIT,
+    Math.min(PROPOSAL_DELTA_LIMIT, Math.round(value)),
+  );
 }
 
 function draftFromDoc(

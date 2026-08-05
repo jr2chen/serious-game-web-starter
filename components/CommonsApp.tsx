@@ -29,7 +29,12 @@ import type {
   TeamId,
   ThemeId,
 } from "@/lib/game/types";
-import { CATEGORIES, EMOJI_OPTIONS, TEAMS } from "@/lib/game/constants";
+import {
+  CATEGORIES,
+  EMOJI_OPTIONS,
+  PROPOSAL_DELTA_LIMIT,
+  TEAMS,
+} from "@/lib/game/constants";
 import { roleRuleLabel } from "@/lib/game/scoring";
 import {
   clearActiveRoom,
@@ -63,7 +68,10 @@ function formatDelta(value: number): string {
 }
 
 function clampProposalDelta(value: number): number {
-  return Math.max(-2, Math.min(2, Math.round(value)));
+  return Math.max(
+    -PROPOSAL_DELTA_LIMIT,
+    Math.min(PROPOSAL_DELTA_LIMIT, Math.round(value)),
+  );
 }
 
 function formatDiscussion(seconds: number): string {

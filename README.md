@@ -24,8 +24,8 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 Same join/create/rejoin flow. On the **main** screen, a QR code encodes the current page URL so you can open the same preview, production, or local link on a phone. The stage header is three pinned rows:
 
-- Your team’s proposal starts from the CSV starter (text + five suggested −2…+2 changes)
-- Anyone on the team can edit the text and nudge the numbers, then tap **Submit revision**
+- Your team’s proposal starts from the CSV starter (text + five suggested changes)
+- Anyone on the team can edit the text and nudge each number up to **±4**, then tap **Submit revision**
 - Teammates’ screens update automatically when someone Submits (last write wins — prefer one reviser at a time)
 - The other team cannot see your draft yet
 

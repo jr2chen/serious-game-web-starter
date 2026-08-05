@@ -204,8 +204,8 @@ Join/create → name + emoji → stage with one mock scenario.
 **Goal:** Each team shares one editable draft; Submit overwrites for everyone on that team.
 
 **Stories:**
-- As a player, I see my team’s proposal prefilled from CSV (text + five −2…+2 deltas)
-- As a player, I can edit the text and nudge each category, then **Submit revision**
+- As a player, I see my team’s proposal prefilled from CSV (text + five deltas)
+- As a player, I can edit the text and nudge each category up to **±4**, then **Submit revision**
 - As a teammate, my screen updates automatically when someone Submits (last write wins)
 - As a player, I am reminded to prefer **one reviser at a time**
 - As the opposing team, I cannot read the other draft yet (reveal is Epic 5)
