@@ -72,6 +72,8 @@ export type TeamProposalDraft = {
   updatedByName: string;
 };
 
+export type RoomPhase = "discuss" | "vote" | "complete";
+
 export type Room = {
   /** Short join code; also used as the Firestore document id. */
   id: string;
@@ -85,8 +87,17 @@ export type Room = {
   playerCount: number;
   /** Shared discussion countdown target (epoch ms); unset until stage starts. */
   timerEndsAtMs?: number;
-  /** "discuss" (default) until a judge moves the room to the public vote. */
-  phase?: "discuss" | "vote";
+  /**
+   * "discuss" (default) → "vote" when a judge reveals proposals →
+   * "complete" after the last round's winner is applied.
+   */
+  phase?: RoomPhase;
+  /** Current scenario id — advances when a judge starts the next round. */
+  scenarioId?: string;
+  /** Current round_order from CSV — advances with scenarioId. */
+  roundOrder?: number;
+  /** Running city category totals — updated when a vote winner is applied. */
+  categoryTotals?: CategoryTotals;
 };
 
 export type RoomPlayer = {

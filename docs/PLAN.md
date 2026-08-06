@@ -250,15 +250,26 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** A judge taps the button and a second device (mid-discussion) flips straight to the vote screen with both proposals visible; casting a vote on one device shows up live on another; a judge's Save revision updates that team's numbers live without touching their text.
 
-### Slice C — Facilitator finalizes deltas (next)
+### Slice C — Apply winner & next round (done)
 
-Facilitator/judge enters the final −2…+2 per category for the round; totals update.
+**Goal:** After the public vote, a judge applies the winning proposal to the city's running totals and opens the next CSV scenario (or finishes the session).
+
+**Stories:**
+- As a judge on the vote screen, I have **Apply winner & next round →**
+- As anyone, that applies the **majority** proposal's suggested numbers to shared `categoryTotals` on the room
+- As anyone, if another scenario exists in CSV, everyone returns to **discuss** with that scenario, fresh starter proposals, cleared votes, and a restarted timer
+- As anyone, if that was the last scenario, the room moves to **complete** with final city totals
+- As a judge, a **tie** (or zero votes) blocks advance until the tally is clear
+
+**Keep simple:** No manual facilitator delta entry separate from the winning proposal; no role reveal / end-game scoring yet.
+
+**Done when:** After Round 1 voting, a judge tap updates city chips on a second device and flips everyone to Round 2's scenario + blank-slate starters.
 
 ---
 
-## Epic 6 — Scoring and next round
+## Epic 6 — Scoring and end game (next)
 
-Show running category totals and team scores (derived). Clear proposals between rounds. At end game: reveal roles and score hidden-role conditions once.
+Show derived team scores. At end game: reveal roles and score hidden-role conditions once.
 
 ---
 
@@ -279,8 +290,8 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 7. Epic 4 — editable private team proposals (done)
 8. Epic 5a — judge seat: both proposals, all roles, shared timer (done)
 9. Epic 5b — judge-triggered public vote screen, with judge number revisions + colored voter chips (done)
-10. Epic 5c — facilitator applies final deltas (next)
-11. Epic 6 — derived scores + next/end
+10. Epic 5c — apply vote winner to city totals + advance scenario (done)
+11. **Epic 6** — derived team scores + end-game role reveal (next)
 12. Epic 7 — polish
 
 ---

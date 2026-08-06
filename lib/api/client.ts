@@ -17,12 +17,14 @@ import { getMyUid } from "@/lib/firebase/auth";
 import {
   addRoomTime,
   createRoom as createFirestoreRoom,
+  ensureRoomRound,
   ensureRoomTimer,
   getRoom as getFirestoreRoom,
   listRecentRooms,
   startVotingPhase,
   subscribeToRoom,
 } from "@/lib/firebase/rooms";
+import { advanceAfterVote } from "@/lib/firebase/rounds";
 import {
   getMySeatInRoom,
   getRoleForPlayer,
@@ -128,6 +130,34 @@ export async function startVoting(roomCode: string): Promise<void> {
   return startVotingPhase(roomCode);
 }
 
+/** Seeds scenario + zeroed city totals on the room the first time anyone stages. */
+export async function seedRoomRound(
+  roomCode: string,
+  scenario: Scenario,
+): Promise<{
+  scenarioId: string;
+  roundOrder: number;
+  categoryTotals: CategoryTotals;
+}> {
+  return ensureRoomRound(roomCode, scenario);
+}
+
+/**
+ * Judge-only: apply the vote winner's deltas to city totals, then open the
+ * next scenario (or finish the session if CSV has no further rounds).
+ */
+export async function advanceRoomAfterVote(input: {
+  roomCode: string;
+  winningTeam: TeamId;
+  currentTotals: CategoryTotals;
+  winningDeltas: Record<CategoryId, number>;
+  nextScenario: Scenario | null;
+  nextStarters: { red: StarterProposal; blue: StarterProposal } | null;
+  judgeName: string;
+}): Promise<{ categoryTotals: CategoryTotals; finished: boolean }> {
+  return advanceAfterVote(input);
+}
+
 export async function seedTeamProposal(input: {
   roomCode: string;
   starter: StarterProposal;
@@ -186,8 +216,22 @@ export async function watchVotes(
   return subscribeToVotes(roomCode, onChange, onError);
 }
 
-export async function getScenario(_roomId?: string): Promise<Scenario> {
-  return getJson<Scenario>("/api/content/scenario");
+export async function getScenario(scenarioId?: string): Promise<Scenario> {
+  if (!scenarioId) {
+    return getJson<Scenario>("/api/content/scenario");
+  }
+  const params = new URLSearchParams({ scenario_id: scenarioId });
+  return getJson<Scenario>(`/api/content/scenario?${params}`);
+}
+
+/** Next CSV scenario after this round_order, or null when the session ends. */
+export async function getNextScenario(
+  afterRoundOrder: number,
+): Promise<Scenario | null> {
+  const params = new URLSearchParams({
+    after_round: String(afterRoundOrder),
+  });
+  return getJson<Scenario | null>(`/api/content/scenario?${params}`);
 }
 
 export async function getStarterProposal(

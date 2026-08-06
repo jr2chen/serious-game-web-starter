@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "react-qr-code";
 import {
+  advanceRoomAfterVote,
   assignHiddenRole,
   castProposalVote,
   createRoom,
   enterRoom,
   extendRoomTimer,
-  getCategoryTotals,
+  getNextScenario,
   getRoom,
   getScenario,
   getStarterProposal,
@@ -18,6 +19,7 @@ import {
   loadRoleForPlayer,
   reviseTeamProposal,
   saveTeamProposal,
+  seedRoomRound,
   seedTeamProposal,
   startRoomTimer,
   startVoting,
@@ -33,6 +35,7 @@ import type {
   HiddenRole,
   ProposalVote,
   Room,
+  RoomPhase,
   RoomPlayer,
   Scenario,
   SeatRole,
@@ -104,6 +107,25 @@ function formatTimer(seconds: number): string {
   const mins = Math.floor(clamped / 60);
   const secs = clamped % 60;
   return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+/**
+ * Firestore re-checks proposal listeners when room.phase leaves "vote".
+ * Active watches on the other team's draft are revoked before React can
+ * unsubscribe — that denial is expected, not a real failure.
+ */
+function isPermissionDeniedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code =
+    "code" in error ? String((error as { code: unknown }).code) : "";
+  const message =
+    "message" in error
+      ? String((error as { message: unknown }).message)
+      : "";
+  return (
+    code === "permission-denied" ||
+    /missing or insufficient permissions/i.test(message)
+  );
 }
 
 const SCORE_ABBR: Record<CategoryId, string> = {
@@ -196,9 +218,12 @@ export default function CommonsApp() {
   const [savingJudgeRevision, setSavingJudgeRevision] = useState<
     Record<TeamId, boolean>
   >({ red: false, blue: false });
-  /** "discuss" until a judge moves the whole room to the public vote. */
-  const [stagePhase, setStagePhase] = useState<"discuss" | "vote">("discuss");
+  /** Mirrors rooms/{code}.phase — discuss → vote → (next discuss | complete). */
+  const [stagePhase, setStagePhase] = useState<RoomPhase>("discuss");
   const [startingVote, setStartingVote] = useState(false);
+  const [advancingRound, setAdvancingRound] = useState(false);
+  /** Live scenario id from the room doc — drives reloads when a round advances. */
+  const [roomScenarioId, setRoomScenarioId] = useState<string | null>(null);
   /** Live, public votes for which team's proposal the city should adopt. */
   const [votes, setVotes] = useState<ProposalVote[]>([]);
   const [expandedProposals, setExpandedProposals] = useState<
@@ -320,7 +345,9 @@ export default function CommonsApp() {
         setDraftUpdatedAtMs(draft.updatedAtMs);
       },
       (error) => {
-        if (active) setLoadError(error.message);
+        if (active && !isPermissionDeniedError(error)) {
+          setLoadError(error.message);
+        }
       },
     ).then((unsubscribe) => {
       if (!active) {
@@ -341,10 +368,24 @@ export default function CommonsApp() {
    * else only once the room reaches the vote phase (the reveal) — the
    * Firestore rules deny the read before then, so this stays gated to avoid
    * a spurious permission error on every red/blue device.
+   *
+   * When phase leaves "vote", Firestore revokes the other-team listens
+   * before this effect cleans up — those permission-denied errors are ignored.
    */
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom) return;
-    if (team !== "judge" && stagePhase !== "vote") return;
+    if (team !== "judge" && stagePhase !== "vote") {
+      // Drop the opposing draft from memory once reveal ends.
+      if (team && isTeamId(team)) {
+        setTeamProposals((prev) => ({
+          red: team === "red" ? prev.red : null,
+          blue: team === "blue" ? prev.blue : null,
+        }));
+      } else if (team !== "judge") {
+        setTeamProposals({ red: null, blue: null });
+      }
+      return;
+    }
 
     let active = true;
     const unsubs: Array<() => void> = [];
@@ -357,7 +398,9 @@ export default function CommonsApp() {
           if (active) setTeamProposals((prev) => ({ ...prev, [t]: draft }));
         },
         (error) => {
-          if (active) setLoadError(error.message);
+          if (active && !isPermissionDeniedError(error)) {
+            setLoadError(error.message);
+          }
         },
       ).then((unsubscribe) => {
         if (!active) {
@@ -427,7 +470,7 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom, team, roster, rolesByPlayerId]);
 
-  /** Live room doc — keeps the shared timer and vote phase in sync for everyone. */
+  /** Live room doc — timer, phase, city totals, and current scenario for everyone. */
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom) return;
 
@@ -439,10 +482,27 @@ export default function CommonsApp() {
       (room) => {
         if (!active) return;
         if (room?.timerEndsAtMs) setTimerEndsAtMs(room.timerEndsAtMs);
-        setStagePhase(room?.phase === "vote" ? "vote" : "discuss");
+        const nextPhase: RoomPhase =
+          room?.phase === "vote" || room?.phase === "complete"
+            ? room.phase
+            : "discuss";
+        // Leaving the vote/reveal clears the expected permission blip from
+        // Firestore revoking the other-team proposal listeners.
+        if (nextPhase !== "vote") {
+          setLoadError((err) =>
+            err && /insufficient permissions|permission-denied/i.test(err)
+              ? null
+              : err,
+          );
+        }
+        setStagePhase(nextPhase);
+        if (room?.categoryTotals) setCategories(room.categoryTotals);
+        if (room?.scenarioId) setRoomScenarioId(room.scenarioId);
       },
       (error) => {
-        if (active) setLoadError(error.message);
+        if (active && !isPermissionDeniedError(error)) {
+          setLoadError(error.message);
+        }
       },
     ).then((unsubscribe) => {
       if (!active) {
@@ -457,6 +517,39 @@ export default function CommonsApp() {
       unsub?.();
     };
   }, [screen, selectedRoom]);
+
+  /** When the room advances rounds, reload the scenario (+ starter for players). */
+  useEffect(() => {
+    if (screen !== "stage" || !roomScenarioId) return;
+    if (scenario?.scenario_id === roomScenarioId) return;
+
+    let active = true;
+    void getScenario(roomScenarioId)
+      .then(async (next) => {
+        if (!active) return;
+        setScenario(next);
+        setExpandedProposals({ red: false, blue: false });
+        if (team && isTeamId(team)) {
+          const proposal = await getStarterProposal(next.scenario_id, team);
+          if (active) setStarter(proposal);
+        } else {
+          setStarter(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Could not load next scenario",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [screen, roomScenarioId, scenario?.scenario_id, team]);
 
   /** Live, public vote tally — only relevant once voting has started. */
   useEffect(() => {
@@ -474,7 +567,10 @@ export default function CommonsApp() {
         if (active) setVotes(nextVotes);
       },
       (error) => {
-        if (active) setLoadError(error.message);
+        // Vote docs are deleted when a round advances; ignore the revoke blip.
+        if (active && !isPermissionDeniedError(error)) {
+          setLoadError(error.message);
+        }
       },
     ).then((unsubscribe) => {
       if (!active) {
@@ -529,6 +625,8 @@ export default function CommonsApp() {
     setSavingJudgeRevision({ red: false, blue: false });
     setStagePhase("discuss");
     setStartingVote(false);
+    setAdvancingRound(false);
+    setRoomScenarioId(null);
     setVotes([]);
     setExpandedProposals({ red: false, blue: false });
     setMyUid(null);
@@ -579,10 +677,15 @@ export default function CommonsApp() {
 
     try {
       setLoadError(null);
-      const [nextScenario, totals] = await Promise.all([
-        getScenario(selectedRoom.id),
-        getCategoryTotals(),
-      ]);
+      const existingRoom = await getRoom(selectedRoom.code);
+      const bootstrap = existingRoom?.scenarioId
+        ? await getScenario(existingRoom.scenarioId)
+        : await getScenario();
+      const round = await seedRoomRound(selectedRoom.code, bootstrap);
+      const nextScenario =
+        round.scenarioId === bootstrap.scenario_id
+          ? bootstrap
+          : await getScenario(round.scenarioId);
 
       let role: HiddenRole | null = null;
       let proposal: StarterProposal | null = null;
@@ -625,9 +728,10 @@ export default function CommonsApp() {
       setName(displayName);
       setEmoji(mark);
       setScenario(nextScenario);
+      setRoomScenarioId(round.scenarioId);
       setStarter(proposal);
       setHiddenRole(role);
-      setCategories(totals);
+      setCategories(round.categoryTotals);
       setTimerEndsAtMs(endsAtMs);
       setMyUid(uid);
       rememberActiveRoom(selectedRoom.code);
@@ -655,10 +759,14 @@ export default function CommonsApp() {
         throw new Error("That room seat is no longer available.");
       }
 
-      const [nextScenario, totals] = await Promise.all([
-        getScenario(room.id),
-        getCategoryTotals(),
-      ]);
+      const bootstrap = room.scenarioId
+        ? await getScenario(room.scenarioId)
+        : await getScenario();
+      const round = await seedRoomRound(room.code, bootstrap);
+      const nextScenario =
+        round.scenarioId === bootstrap.scenario_id
+          ? bootstrap
+          : await getScenario(round.scenarioId);
 
       let proposal: StarterProposal | null = null;
       if (seat.player.team !== "judge") {
@@ -693,9 +801,10 @@ export default function CommonsApp() {
       setEmoji(seat.player.emoji);
       setTeam(seat.player.team);
       setScenario(nextScenario);
+      setRoomScenarioId(round.scenarioId);
       setStarter(proposal);
       setHiddenRole(seat.role);
-      setCategories(totals);
+      setCategories(round.categoryTotals);
       setTimerEndsAtMs(endsAtMs);
       setMyUid(uid);
       rememberActiveRoom(room.code);
@@ -735,6 +844,73 @@ export default function CommonsApp() {
       );
     } finally {
       setStartingVote(false);
+    }
+  }
+
+  /**
+   * Judge-only: apply the vote-winning proposal's deltas to the shared city
+   * totals, then open the next CSV scenario (or finish if there isn't one).
+   */
+  async function applyWinnerAndAdvance() {
+    if (!selectedRoom || !isJudge || !categories || !scenario) return;
+
+    const redCount = votes.filter((v) => v.choice === "red").length;
+    const blueCount = votes.filter((v) => v.choice === "blue").length;
+    if (redCount === 0 && blueCount === 0) {
+      setLoadError("No votes yet — wait for players to vote.");
+      return;
+    }
+    if (redCount === blueCount) {
+      setLoadError("Tie vote — need a clear majority before advancing.");
+      return;
+    }
+
+    const winningTeam: TeamId = redCount > blueCount ? "red" : "blue";
+    const draft = teamProposals[winningTeam];
+    if (!draft) {
+      setLoadError("Winning team has no proposal draft yet.");
+      return;
+    }
+
+    setAdvancingRound(true);
+    setLoadError(null);
+    try {
+      const next = await getNextScenario(scenario.round_order);
+      let nextStarters: {
+        red: StarterProposal;
+        blue: StarterProposal;
+      } | null = null;
+      if (next) {
+        const [red, blue] = await Promise.all([
+          getStarterProposal(next.scenario_id, "red"),
+          getStarterProposal(next.scenario_id, "blue"),
+        ]);
+        nextStarters = { red, blue };
+      }
+
+      await advanceRoomAfterVote({
+        roomCode: selectedRoom.code,
+        winningTeam,
+        currentTotals: categories,
+        winningDeltas: {
+          jobs: draft.jobs,
+          housing: draft.housing,
+          accessibility: draft.accessibility,
+          climate: draft.climate,
+          cost: draft.cost,
+        },
+        nextScenario: next,
+        nextStarters,
+        judgeName: name.trim() || "Player",
+      });
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Could not advance to the next round",
+      );
+    } finally {
+      setAdvancingRound(false);
     }
   }
 
@@ -1324,7 +1500,21 @@ export default function CommonsApp() {
             )}
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-[18px] pb-6">
-              {stagePhase === "vote" ? (
+              {stagePhase === "complete" ? (
+              <>
+                <p className="label-mono mb-[10px] text-clay-deep">Session complete</p>
+                <h2 className="mb-2 font-display text-[24px] leading-[1.15] font-semibold">
+                  City totals after the final vote
+                </h2>
+                <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
+                  The judge applied the last round&apos;s winning proposal.
+                  Running category totals are shown in the bar above.
+                </p>
+                {loadError && screen === "stage" && (
+                  <p className={LOAD_ERROR}>{loadError}</p>
+                )}
+              </>
+              ) : stagePhase === "vote" ? (
               <>
                 <p className="label-mono mb-[10px] text-clay-deep">Voting</p>
                 <h2 className="mb-2 font-display text-[24px] leading-[1.15] font-semibold">
@@ -1516,6 +1706,30 @@ export default function CommonsApp() {
                     </div>
                   );
                 })}
+
+                {isJudge && (
+                  <div className="card mb-4 border-clay-deep bg-[var(--tint-clay-soft)] p-4">
+                    <p className="mb-1 text-[13.5px] font-semibold text-clay-deep">
+                      Ready for the next round?
+                    </p>
+                    <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
+                      Applies the vote-winning proposal&apos;s numbers to the
+                      city totals, clears votes, and opens the next scenario
+                      (or finishes the session if this was the last round).
+                      Needs a clear majority — ties won&apos;t advance.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={advancingRound}
+                      onClick={() => void applyWinnerAndAdvance()}
+                    >
+                      {advancingRound
+                        ? "Advancing…"
+                        : "Apply winner & next round →"}
+                    </button>
+                  </div>
+                )}
 
                 {loadError && screen === "stage" && (
                   <p className={LOAD_ERROR}>{loadError}</p>
