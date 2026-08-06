@@ -2,31 +2,41 @@ import type {
   CategoryId,
   CategoryTotals,
   HiddenRole,
+  ProposalVote,
   Room,
   RoomPlayer,
   Scenario,
+  SeatRole,
   StarterProposal,
   TeamId,
   TeamProposalDraft,
   ThemeId,
 } from "@/lib/game/types";
 import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
+import { getMyUid } from "@/lib/firebase/auth";
 import {
+  addRoomTime,
   createRoom as createFirestoreRoom,
+  ensureRoomTimer,
   getRoom as getFirestoreRoom,
   listRecentRooms,
+  startVotingPhase,
+  subscribeToRoom,
 } from "@/lib/firebase/rooms";
 import {
   getMySeatInRoom,
+  getRoleForPlayer,
   joinRoomAsPlayer,
   subscribeToRoomPlayers,
   type PlayerSeat,
 } from "@/lib/firebase/players";
 import {
   ensureTeamProposal,
+  reviseTeamProposalDeltas,
   submitTeamProposal,
   subscribeToTeamProposal,
 } from "@/lib/firebase/proposals";
+import { castVote, subscribeToVotes } from "@/lib/firebase/votes";
 import type { Unsubscribe } from "firebase/firestore";
 
 /** Browser client for game content and rooms. */
@@ -56,8 +66,8 @@ export async function enterRoom(input: {
   roomCode: string;
   displayName: string;
   emoji: string;
-  team: TeamId;
-  role: HiddenRole;
+  team: SeatRole;
+  role: HiddenRole | null;
 }): Promise<void> {
   await joinRoomAsPlayer(input);
 }
@@ -68,12 +78,54 @@ export async function loadMySeat(
   return getMySeatInRoom(roomCode);
 }
 
+/** This browser's anonymous uid — used to tell "my vote" apart from others. */
+export async function loadMyUid(): Promise<string> {
+  return getMyUid();
+}
+
+export async function loadRoleForPlayer(
+  roomCode: string,
+  playerId: string,
+): Promise<HiddenRole | null> {
+  return getRoleForPlayer(roomCode, playerId);
+}
+
 export async function watchRoomPlayers(
   roomCode: string,
   onChange: (players: RoomPlayer[]) => void,
   onError?: (error: Error) => void,
 ): Promise<Unsubscribe> {
   return subscribeToRoomPlayers(roomCode, onChange, onError);
+}
+
+/** Live room doc — used to keep the shared discussion timer in sync. */
+export async function watchRoom(
+  roomCode: string,
+  onChange: (room: Room | null) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToRoom(roomCode, onChange, onError);
+}
+
+/** Starts the shared countdown if it isn't running yet; returns its end time. */
+export async function startRoomTimer(
+  roomCode: string,
+  durationSeconds: number,
+): Promise<number> {
+  return ensureRoomTimer(roomCode, durationSeconds);
+}
+
+/** Judge-only control — pushes the shared countdown back by N seconds. */
+export async function extendRoomTimer(
+  roomCode: string,
+  extraSeconds: number,
+): Promise<void> {
+  return addRoomTime(roomCode, extraSeconds);
+}
+
+/** Judge-only control — moves everyone to the public proposal vote. */
+export async function startVoting(roomCode: string): Promise<void> {
+  return startVotingPhase(roomCode);
 }
 
 export async function seedTeamProposal(input: {
@@ -102,6 +154,36 @@ export async function watchTeamProposal(
   onError?: (error: Error) => void,
 ): Promise<Unsubscribe> {
   return subscribeToTeamProposal(roomCode, team, onChange, onError);
+}
+
+/** Judge-only control — revises a team's suggested numbers, not their text. */
+export async function reviseTeamProposal(input: {
+  roomCode: string;
+  team: TeamId;
+  deltas: Record<CategoryId, number>;
+  revisedByName: string;
+}): Promise<void> {
+  return reviseTeamProposalDeltas(input);
+}
+
+/** Casts (or changes) this browser's public vote — Red/Blue players only. */
+export async function castProposalVote(input: {
+  roomCode: string;
+  choice: TeamId;
+  voterTeam: TeamId;
+  displayName: string;
+  emoji: string;
+}): Promise<void> {
+  return castVote(input);
+}
+
+/** Live, public vote tally for the room. */
+export async function watchVotes(
+  roomCode: string,
+  onChange: (votes: ProposalVote[]) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToVotes(roomCode, onChange, onError);
 }
 
 export async function getScenario(_roomId?: string): Promise<Scenario> {
