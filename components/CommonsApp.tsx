@@ -1532,26 +1532,14 @@ export default function CommonsApp() {
                   Final scores &amp; role reveal
                 </h2>
                 <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
-                  Teams score as category total + sum of met role bonuses.
-                  Players below are ranked by their personal total (team
-                  points + their own role bonus).
+                  Team score is only that team&apos;s city categories (no role
+                  bonuses). Each player&apos;s total is team + their own role
+                  bonus — ranked highest first below.
                 </p>
 
                 <p className="label-mono mb-2 text-clay-deep">Teams</p>
                 {(["red", "blue"] as const).map((t) => {
                   const teamScore = teamCategoryScore(categories, t);
-                  const members = roster.filter((p) => p.team === t);
-                  const bonus = members.reduce((sum, p) => {
-                    const role = rolesByPlayerId[p.id];
-                    if (!role) return sum;
-                    const met = roleConditionMet(
-                      categories[role.target_category],
-                      role.comparison,
-                      role.threshold,
-                    );
-                    return sum + (met ? 1 : 0);
-                  }, 0);
-                  const rolesReady = members.every((p) => p.id in rolesByPlayerId);
 
                   return (
                     <div key={t} className="card mb-3 p-4">
@@ -1564,24 +1552,11 @@ export default function CommonsApp() {
                           {TEAMS[t].name}
                         </span>
                         <span className="font-display text-[22px] font-semibold tabular-nums">
-                          {rolesReady ? (
-                            <>
-                              {teamScore}
-                              <span className="text-ink-soft"> + </span>
-                              {bonus}
-                            </>
-                          ) : (
-                            <span className="text-[14px] font-sans font-normal text-ink-soft">
-                              …
-                            </span>
-                          )}
+                          {teamScore}
                         </span>
                       </div>
                       <p className="text-[11px] text-ink-soft">
                         {TEAMS[t].goalLabel}
-                        {rolesReady
-                          ? ` · total ${teamScore + bonus}`
-                          : " · revealing roles…"}
                       </p>
                     </div>
                   );

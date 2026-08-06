@@ -42,7 +42,7 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 - On the vote screen, keep editing either proposal; when ready, **Adopt Red** or **Adopt Blue** (public tally is advisory) — that proposal’s numbers update the city, votes clear, and everyone lands on the next scenario (or **session complete** after the last round)
 
 **Session complete** — after the last round is applied:
-- A **team scoreboard** on top — each team as **team + bonus** (category total + sum of that team’s met role bonuses)
+- A **team scoreboard** on top — each team’s category total only (Red = Jobs+Housing, Blue = Accessibility+Climate; no role bonuses)
 - A **player scoreboard** below, ranked by each player’s **total** (team points + their own role bonus), with the role reveal under each row
 
 The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
