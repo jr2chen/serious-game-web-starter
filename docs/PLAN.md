@@ -234,7 +234,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** A judge device sees both drafts + every role update live, and tapping +1m visibly extends the countdown on a second, non-judge device.
 
-### Slice B — Public vote screen (current)
+### Slice B — Public vote screen (done)
 
 **Goal:** The judge reveals both proposals to the whole room and everyone casts a public vote on which one the city should adopt.
 
@@ -242,12 +242,13 @@ Join/create → name + emoji → stage with one mock scenario.
 - As a judge, I have a **Move room to voting →** button that moves everyone to a shared vote screen
 - As anyone in the room, once voting starts I can see both teams’ proposals (previously private) and the city’s totals **if that proposal were adopted**
 - As anyone, each proposal starts **compressed** (team name + vote count + revised totals) and expands on tap to the full text and category deltas
-- As a Red or Blue player, I can cast (or change) a **public** vote for either proposal; my name and mark show up attached to the one I picked
+- As a Red or Blue player, I can cast (or change) a **public** vote for either proposal; my name and mark show up attached to the one I picked, tinted by **my own team's color** so others can tell at a glance who's voting what
 - As a judge, I don’t vote — I only watch the tally
+- As a judge, I can nudge either team's suggested numbers (±4) and **Save revision**; the team's own wording is untouched and their screen updates live, same as a teammate's Submit — this still works after voting has started
 
 **Keep simple:** No vote deadline/lock, no automatic winner, no applying the winning proposal's deltas yet (that's Slice C). Room state is a single `phase: "discuss" | "vote"` field — one-way for now (no "back to discussion" button).
 
-**Done when:** A judge taps the button and a second device (mid-discussion) flips straight to the vote screen with both proposals visible; casting a vote on one device shows up live on another.
+**Done when:** A judge taps the button and a second device (mid-discussion) flips straight to the vote screen with both proposals visible; casting a vote on one device shows up live on another; a judge's Save revision updates that team's numbers live without touching their text.
 
 ### Slice C — Facilitator finalizes deltas (next)
 
@@ -277,8 +278,8 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 6. Epic 3d — rejoin button after refresh (done)
 7. Epic 4 — editable private team proposals (done)
 8. Epic 5a — judge seat: both proposals, all roles, shared timer (done)
-9. **Epic 5b** — judge-triggered public vote screen (this slice)
-10. Epic 5c — facilitator applies final deltas
+9. Epic 5b — judge-triggered public vote screen, with judge number revisions + colored voter chips (done)
+10. Epic 5c — facilitator applies final deltas (next)
 11. Epic 6 — derived scores + next/end
 12. Epic 7 — polish
 

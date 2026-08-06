@@ -32,6 +32,7 @@ import {
 } from "@/lib/firebase/players";
 import {
   ensureTeamProposal,
+  reviseTeamProposalDeltas,
   submitTeamProposal,
   subscribeToTeamProposal,
 } from "@/lib/firebase/proposals";
@@ -155,10 +156,21 @@ export async function watchTeamProposal(
   return subscribeToTeamProposal(roomCode, team, onChange, onError);
 }
 
+/** Judge-only control — revises a team's suggested numbers, not their text. */
+export async function reviseTeamProposal(input: {
+  roomCode: string;
+  team: TeamId;
+  deltas: Record<CategoryId, number>;
+  revisedByName: string;
+}): Promise<void> {
+  return reviseTeamProposalDeltas(input);
+}
+
 /** Casts (or changes) this browser's public vote — Red/Blue players only. */
 export async function castProposalVote(input: {
   roomCode: string;
   choice: TeamId;
+  voterTeam: TeamId;
   displayName: string;
   emoji: string;
 }): Promise<void> {

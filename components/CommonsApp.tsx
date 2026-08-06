@@ -16,6 +16,7 @@ import {
   loadMySeat,
   loadMyUid,
   loadRoleForPlayer,
+  reviseTeamProposal,
   saveTeamProposal,
   seedTeamProposal,
   startRoomTimer,
@@ -188,6 +189,13 @@ export default function CommonsApp() {
   const [rolesByPlayerId, setRolesByPlayerId] = useState<
     Record<string, HiddenRole | null>
   >({});
+  /** Judge-only: in-progress number edits per team, before Save revision. */
+  const [judgeDraftDeltas, setJudgeDraftDeltas] = useState<
+    Record<TeamId, Record<CategoryId, number>>
+  >({ red: EMPTY_DELTAS, blue: EMPTY_DELTAS });
+  const [savingJudgeRevision, setSavingJudgeRevision] = useState<
+    Record<TeamId, boolean>
+  >({ red: false, blue: false });
   /** "discuss" until a judge moves the whole room to the public vote. */
   const [stagePhase, setStagePhase] = useState<"discuss" | "vote">("discuss");
   const [startingVote, setStartingVote] = useState(false);
@@ -366,6 +374,29 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom, team, stagePhase]);
 
+  /**
+   * Judge-only: keep the editable draft numbers in sync with the live
+   * proposal — mirrors how a team's own draftDeltas track their own draft.
+   */
+  useEffect(() => {
+    if (team !== "judge") return;
+    setJudgeDraftDeltas((prev) => {
+      const next = { ...prev };
+      for (const t of ["red", "blue"] as const) {
+        const draft = teamProposals[t];
+        if (!draft) continue;
+        next[t] = {
+          jobs: draft.jobs,
+          housing: draft.housing,
+          accessibility: draft.accessibility,
+          climate: draft.climate,
+          cost: draft.cost,
+        };
+      }
+      return next;
+    });
+  }, [team, teamProposals]);
+
   /** Judge-only: fetch each roster player's hidden role on demand. */
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom || team !== "judge") return;
@@ -494,6 +525,8 @@ export default function CommonsApp() {
     setScoreInfoOpen(false);
     setTeamProposals({ red: null, blue: null });
     setRolesByPlayerId({});
+    setJudgeDraftDeltas({ red: EMPTY_DELTAS, blue: EMPTY_DELTAS });
+    setSavingJudgeRevision({ red: false, blue: false });
     setStagePhase("discuss");
     setStartingVote(false);
     setVotes([]);
@@ -707,11 +740,12 @@ export default function CommonsApp() {
 
   /** Casts or changes this player's public vote — Red/Blue only. */
   async function voteForProposal(choice: TeamId) {
-    if (!selectedRoom || isJudge) return;
+    if (!selectedRoom || isJudge || !team || !isTeamId(team)) return;
     try {
       await castProposalVote({
         roomCode: selectedRoom.code,
         choice,
+        voterTeam: team,
         displayName: name.trim() || "Player",
         emoji: emoji ?? "🙂",
       });
@@ -753,6 +787,35 @@ export default function CommonsApp() {
       ...prev,
       [key]: clampProposalDelta(prev[key] + step),
     }));
+  }
+
+  /** Judge-only: nudge one number in a team's proposal, before Save revision. */
+  function nudgeJudgeDelta(t: TeamId, key: CategoryId, step: number) {
+    setJudgeDraftDeltas((prev) => ({
+      ...prev,
+      [t]: { ...prev[t], [key]: clampProposalDelta(prev[t][key] + step) },
+    }));
+  }
+
+  /** Judge-only: pushes revised numbers live — that team's text is untouched. */
+  async function saveJudgeRevision(t: TeamId) {
+    if (!selectedRoom || !isJudge) return;
+    setSavingJudgeRevision((prev) => ({ ...prev, [t]: true }));
+    setLoadError(null);
+    try {
+      await reviseTeamProposal({
+        roomCode: selectedRoom.code,
+        team: t,
+        deltas: judgeDraftDeltas[t],
+        revisedByName: `Judge · ${name.trim() || "Player"}`,
+      });
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not save revision",
+      );
+    } finally {
+      setSavingJudgeRevision((prev) => ({ ...prev, [t]: false }));
+    }
   }
 
   const teamInfo = team && isTeamId(team) ? TEAMS[team] : null;
@@ -1357,7 +1420,7 @@ export default function CommonsApp() {
                             })}
                         </div>
 
-                        {expanded && (
+                        {expanded && !isJudge && (
                           <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
                             {DELTA_KEYS.map((key) => (
                               <span key={key} className="chip">
@@ -1372,12 +1435,66 @@ export default function CommonsApp() {
                           </div>
                         )}
 
+                        {expanded && isJudge && draft && (
+                          <>
+                            <p className="mb-1 font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
+                              Revise suggested changes
+                            </p>
+                            <div className="no-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
+                              {DELTA_KEYS.map((key) => (
+                                <div
+                                  key={key}
+                                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-deep px-2 py-1.5"
+                                >
+                                  <span className="font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
+                                    {SCORE_ABBR[key]}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                                    aria-label={`Decrease ${TEAMS[t].name} ${key}`}
+                                    onClick={() => nudgeJudgeDelta(t, key, -1)}
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-5 text-center font-display text-sm font-semibold">
+                                    {formatDelta(judgeDraftDeltas[t][key])}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                                    aria-label={`Increase ${TEAMS[t].name} ${key}`}
+                                    onClick={() => nudgeJudgeDelta(t, key, 1)}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary mb-3"
+                              disabled={savingJudgeRevision[t]}
+                              onClick={() => void saveJudgeRevision(t)}
+                            >
+                              {savingJudgeRevision[t]
+                                ? "Saving…"
+                                : "Save revision"}
+                            </button>
+                          </>
+                        )}
+
                         {votesForTeam.length > 0 && (
                           <div className="mb-3 flex flex-wrap gap-1">
                             {votesForTeam.map((v) => (
                               <span
                                 key={v.playerId}
-                                className="inline-flex items-center gap-1 rounded-full border border-line bg-paper-deep px-[8px] py-[3px] text-[11px]"
+                                className={`inline-flex items-center gap-1 rounded-full border px-[8px] py-[3px] text-[11px] ${
+                                  v.voterTeam === "red"
+                                    ? "border-team-red-line bg-team-red-soft text-rust"
+                                    : "border-team-blue-line bg-team-blue-soft text-team-blue"
+                                }`}
+                                title={`${TEAMS[v.voterTeam].name} player`}
                               >
                                 <span aria-hidden>{v.emoji}</span>
                                 <span>{v.displayName}</span>
@@ -1450,8 +1567,9 @@ export default function CommonsApp() {
                     Both team proposals
                   </p>
                   <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
-                    Read-only — you watch both drafts update live but can’t
-                    edit them.
+                    Their text is theirs to write — but you can revise the
+                    suggested numbers below and Save to push your revision
+                    live.
                   </p>
                   {(["red", "blue"] as const).map((t) => {
                     const draft = teamProposals[t];
@@ -1476,16 +1594,50 @@ export default function CommonsApp() {
                             <p className="mb-3 whitespace-pre-wrap text-sm leading-[1.55] text-ink">
                               {draft.proposal_text || "(no text yet)"}
                             </p>
-                            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                            <p className="mb-1 font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
+                              Suggested category changes
+                            </p>
+                            <div className="no-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
                               {DELTA_KEYS.map((key) => (
-                                <span key={key} className="chip">
-                                  <span className="text-ink-soft">
+                                <div
+                                  key={key}
+                                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-deep px-2 py-1.5"
+                                >
+                                  <span className="font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
                                     {SCORE_ABBR[key]}
                                   </span>
-                                  <span>{formatDelta(draft[key])}</span>
-                                </span>
+                                  <button
+                                    type="button"
+                                    className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                                    aria-label={`Decrease ${TEAMS[t].name} ${key}`}
+                                    onClick={() => nudgeJudgeDelta(t, key, -1)}
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-5 text-center font-display text-sm font-semibold">
+                                    {formatDelta(judgeDraftDeltas[t][key])}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                                    aria-label={`Increase ${TEAMS[t].name} ${key}`}
+                                    onClick={() => nudgeJudgeDelta(t, key, 1)}
+                                  >
+                                    +
+                                  </button>
+                                </div>
                               ))}
                             </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              disabled={savingJudgeRevision[t]}
+                              onClick={() => void saveJudgeRevision(t)}
+                            >
+                              {savingJudgeRevision[t]
+                                ? "Saving…"
+                                : "Save revision"}
+                            </button>
                           </>
                         ) : (
                           <p className="text-[13px] text-ink-soft">

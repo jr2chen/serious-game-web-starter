@@ -5,6 +5,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  updateDoc,
   type Unsubscribe,
 } from "firebase/firestore";
 import { ensureAnonymousUser } from "@/lib/firebase/auth";
@@ -160,6 +161,35 @@ export async function submitTeamProposal(input: {
     updatedAt: serverTimestamp(),
     updatedByUid: user.uid,
     updatedByName: input.displayName,
+  });
+}
+
+/**
+ * Judge-only: overwrite just the five suggested numbers, leaving the team's
+ * own proposal text untouched. Fails if the team hasn't started a draft yet.
+ */
+export async function reviseTeamProposalDeltas(input: {
+  roomCode: string;
+  team: TeamId;
+  deltas: Record<CategoryId, number>;
+  revisedByName: string;
+}): Promise<void> {
+  const user = await ensureAnonymousUser();
+  const ref = proposalRef(input.roomCode, input.team);
+  const existing = await getDoc(ref);
+  if (!existing.exists()) {
+    throw new Error("This team hasn't started a draft yet");
+  }
+
+  await updateDoc(ref, {
+    jobs: clampDelta(input.deltas.jobs),
+    housing: clampDelta(input.deltas.housing),
+    accessibility: clampDelta(input.deltas.accessibility),
+    climate: clampDelta(input.deltas.climate),
+    cost: clampDelta(input.deltas.cost),
+    updatedAt: serverTimestamp(),
+    updatedByUid: user.uid,
+    updatedByName: input.revisedByName,
   });
 }
 

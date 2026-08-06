@@ -14,7 +14,9 @@ service cloud.firestore {
     }
 
     // Judges are neutral facilitators — they can see both proposals and
-    // every hidden role, but never write proposals or secrets themselves.
+    // every hidden role, and may revise a proposal's suggested numbers
+    // (the app only ever sends deltas, never proposal_text, for a judge
+    // write), but they never write secrets or cast a vote themselves.
     function isJudgeInRoom(roomId) {
       return signedIn() && myTeamInRoom(roomId) == 'judge';
     }
@@ -55,19 +57,23 @@ service cloud.firestore {
 
     // Shared team draft — that team's players and judges can always read it;
     // everyone else can once the room reaches the vote phase (the reveal).
-    // Only that team's players can write (last Submit wins).
+    // That team's players (full Submit) or a judge (deltas only, by
+    // app convention) can write; last write wins either way.
     match /rooms/{roomId}/proposals/{teamId} {
       allow read: if isTeammateProposal(roomId, teamId)
         || isJudgeInRoom(roomId)
         || (signedIn() && roomPhaseIsVote(roomId));
-      allow write: if isTeammateProposal(roomId, teamId);
+      allow write: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
     }
 
     // Public vote for which proposal the city adopts — anyone can read;
-    // only seated Red/Blue players can cast one (last write wins).
+    // only seated Red/Blue players can cast one (last write wins), and the
+    // stored voterTeam must match their real roster team (no spoofing color).
     match /rooms/{roomId}/votes/{playerId} {
       allow read: if signedIn();
-      allow create, update: if isSelf(playerId) && isVotingEligible(roomId);
+      allow create, update: if isSelf(playerId)
+        && isVotingEligible(roomId)
+        && request.resource.data.voterTeam == myTeamInRoom(roomId);
       allow delete: if isSelf(playerId);
     }
 

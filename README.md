@@ -1,4 +1,4 @@
-# Commons — Epic 5b public vote screen
+# Commons — Epic 5b: judge revisions + colored voter chips
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -17,7 +17,8 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 **UI/UX improvements** — UI styles moved to Tailwind; main screen shows a QR for the current URL  
 **Epic 4** — shared editable team proposal (Submit overwrites for teammates)  
 **Epic 5a** — a neutral **Judge** seat that sees both proposals + every hidden role, and a discussion timer that's now the same clock on every device  
-**This slice** — Epic 5b: the judge can move the whole room to a **public vote** screen — both proposals reveal, everyone sees the city's totals if each were adopted, and Red/Blue players cast a public vote  
+**Epic 5b** — the judge can move the whole room to a **public vote** screen — both proposals reveal, everyone sees the city's totals if each were adopted, and Red/Blue players cast a public vote  
+**This slice** — judges can revise either team's suggested numbers (never their text), and each voter's chip on the vote screen is tinted by their own team color  
 **Next** — Epic 5c (facilitator applies final deltas)
 
 ---
@@ -34,7 +35,8 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 
 **Judge** — a neutral, non-scoring seat:
 - No hidden role, no proposal of your own
-- See **both** teams’ live drafts on stage (read-only)
+- See **both** teams’ live drafts on stage
+- Nudge either team’s five suggested numbers (±4) and tap **Save revision** — the team’s own wording is never touched, and they see your revision live, same as a teammate’s Submit
 - See every seated player’s hidden role (loads on demand as the roster fills in)
 - Tap **+1m** next to the timer to add a minute — every device in the room sees the same countdown, not just your own
 - Tap **Move room to voting →** to move the whole room to the public vote screen
@@ -44,15 +46,15 @@ The discussion timer itself moved from a private per-tab mock to a single Firest
 **Voting screen** — once a judge starts it, everyone (Red, Blue, and Judge) sees the same shared screen instead of the discussion/proposal view:
 - Both proposals appear, each **compressed** by default — team name, a one-line vote count, a one-line excerpt of the text, and a compact row of what the city's totals would be **if that proposal were adopted**
 - Tap a proposal to expand it: full text plus the individual category deltas
-- Red and Blue players cast a **public** vote for either proposal — their name and mark appear on the card they picked, and can be changed any time
-- Judges watch the tally but don’t vote themselves
+- Red and Blue players cast a **public** vote for either proposal — their name and mark appear on the card they picked, tinted **rust for Red voters and blue for Blue voters** so anyone can see at a glance who’s voting what, and can be changed any time
+- Judges watch the tally but don’t vote themselves — expanding a proposal still lets a judge revise its suggested numbers even after voting has started
 
 ---
 
 ## Firebase setup (required)
 
 1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md)
-2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — this slice adds the `votes/{uid}` path and widens `proposals/{team}` reads to everyone once voting starts
+2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — this slice lets a judge **write** `proposals/{team}` (to revise numbers) and adds a validated `voterTeam` field on `votes/{uid}`
 3. `cp .env.local.example .env.local` and paste web keys, then `npm run dev`
 
 Without `.env.local`, the main screen shows a configuration error instead of rooms.

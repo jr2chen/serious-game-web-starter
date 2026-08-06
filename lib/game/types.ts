@@ -101,6 +101,8 @@ export type RoomPlayer = {
 export type ProposalVote = {
   playerId: string;
   choice: TeamId;
+  /** The voter's own seated team — colors their chip on the vote screen. */
+  voterTeam: TeamId;
   displayName: string;
   emoji: string;
   updatedAtMs: number;

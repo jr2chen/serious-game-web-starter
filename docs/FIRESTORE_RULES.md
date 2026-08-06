@@ -16,13 +16,13 @@ Tick items off as you go (`[ ]` → `[x]`).
 | `rooms/{code}` | Any signed-in user (read/write) — lobby metadata, shared timer, phase |
 | `rooms/{code}/players/{uid}` | Everyone signed-in can **read**; only that uid can **write** |
 | `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; only that uid can **write** |
-| `rooms/{code}/proposals/{team}` | That team's players and judges can always **read**; once `rooms/{code}.phase == "vote"`, anyone signed in can **read** both; only that team's players can **write** |
-| `rooms/{code}/votes/{uid}` | Any signed-in user can **read**; only seated `red`/`blue` players can **write** their own vote |
+| `rooms/{code}/proposals/{team}` | That team's players and judges can always **read**; once `rooms/{code}.phase == "vote"`, anyone signed in can **read** both; that team's players **or a judge** can **write** (the app only ever lets a judge change the five numbers, never the text) |
+| `rooms/{code}/votes/{uid}` | Any signed-in user can **read**; only seated `red`/`blue` players can **write** their own vote, and only with a `voterTeam` matching their real roster team |
 | Everything else | Denied |
 
 Anonymous Auth counts as signed in.
 
-**Important:** Republish rules after this change — it adds the `votes` path and widens `proposals` reads to everyone once a judge starts the vote phase.
+**Important:** Republish rules after this change — judges can now **write** `proposals/{team}` (to revise the suggested numbers), and votes now store/validate a `voterTeam` field.
 
 ---
 
@@ -37,6 +37,8 @@ Anonymous Auth counts as signed in.
 - [ ] Confirm a red/blue player still cannot read the other team's proposal doc before voting starts
 - [ ] Join as a `judge` seat — confirm you can read both teams' proposals and every player's hidden role, and can add time to the shared timer
 - [ ] As a judge, tap **Move room to voting** — confirm a red/blue device now sees both proposals and can cast a public vote; confirm the judge device cannot cast a vote
+- [ ] As a judge, revise a team's suggested numbers and **Save revision** — confirm that team's device sees the new numbers live, and the proposal text is untouched
+- [ ] Cast a vote as Red and as Blue on two devices — confirm each voter's chip on the vote screen is tinted by their own team color
 
 ---
 
@@ -95,12 +97,14 @@ service cloud.firestore {
       allow read: if isTeammateProposal(roomId, teamId)
         || isJudgeInRoom(roomId)
         || (signedIn() && roomPhaseIsVote(roomId));
-      allow write: if isTeammateProposal(roomId, teamId);
+      allow write: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
     }
 
     match /rooms/{roomId}/votes/{playerId} {
       allow read: if signedIn();
-      allow create, update: if isSelf(playerId) && isVotingEligible(roomId);
+      allow create, update: if isSelf(playerId)
+        && isVotingEligible(roomId)
+        && request.resource.data.voterTeam == myTeamInRoom(roomId);
       allow delete: if isSelf(playerId);
     }
 
@@ -143,5 +147,6 @@ rooms/{CODE}/proposals/{red|blue}   // shared team draft (last Submit wins)
 
 rooms/{CODE}/votes/{uid}            // one public vote per red/blue player (last write wins)
   choice,          // "red" | "blue" — which proposal this player wants adopted
+  voterTeam,       // "red" | "blue" — this player's own roster team; colors their chip
   displayName, emoji, updatedAt
 ```

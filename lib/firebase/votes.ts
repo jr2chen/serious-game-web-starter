@@ -20,10 +20,14 @@ function voteFromDoc(
 ): ProposalVote | null {
   const choice =
     data.choice === "red" || data.choice === "blue" ? data.choice : null;
+  const voterTeam =
+    data.voterTeam === "red" || data.voterTeam === "blue"
+      ? data.voterTeam
+      : null;
   const displayName =
     typeof data.displayName === "string" ? data.displayName : null;
   const emoji = typeof data.emoji === "string" ? data.emoji : null;
-  if (!choice || !displayName || !emoji) return null;
+  if (!choice || !voterTeam || !displayName || !emoji) return null;
 
   const updatedAt = data.updatedAt;
   let updatedAtMs = Date.now();
@@ -33,13 +37,14 @@ function voteFromDoc(
     updatedAtMs = updatedAt;
   }
 
-  return { playerId: id, choice, displayName, emoji, updatedAtMs };
+  return { playerId: id, choice, voterTeam, displayName, emoji, updatedAtMs };
 }
 
 /** Cast (or change) this browser's public vote for which proposal to adopt. */
 export async function castVote(input: {
   roomCode: string;
   choice: TeamId;
+  voterTeam: TeamId;
   displayName: string;
   emoji: string;
 }): Promise<void> {
@@ -47,6 +52,7 @@ export async function castVote(input: {
   const db = getFirebaseDb();
   await setDoc(doc(db, ROOMS, input.roomCode, VOTES, user.uid), {
     choice: input.choice,
+    voterTeam: input.voterTeam,
     displayName: input.displayName,
     emoji: input.emoji,
     updatedAt: serverTimestamp(),
