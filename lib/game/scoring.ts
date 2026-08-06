@@ -1,4 +1,10 @@
-import type { ComparisonOp, SeatRole, TeamId } from "@/lib/game/types";
+import { TEAMS } from "@/lib/game/constants";
+import type {
+  CategoryTotals,
+  ComparisonOp,
+  SeatRole,
+  TeamId,
+} from "@/lib/game/types";
 
 export const COMPARISON_OPS: ComparisonOp[] = [">", ">=", "<", "<=", "="];
 
@@ -54,4 +60,15 @@ export function roleConditionMet(
     case "=":
       return finalTotal === threshold;
   }
+}
+
+/** Red = Jobs+Housing, Blue = Accessibility+Climate (Cost is neither). */
+export function teamCategoryScore(
+  totals: CategoryTotals,
+  teamId: TeamId,
+): number {
+  return TEAMS[teamId].goalCategories.reduce(
+    (sum, categoryId) => sum + totals[categoryId],
+    0,
+  );
 }

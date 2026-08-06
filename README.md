@@ -1,4 +1,4 @@
-# Commons — Epic 5c: apply winner & next round
+# Commons — Epic 6a: role reveal + team + bonus
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -16,9 +16,9 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 **Epic 3** — Firebase rooms, roster, rejoin  
 **UI/UX improvements** — UI styles moved to Tailwind; main screen shows a QR for the current URL  
 **Epic 4** — shared editable team proposal (Submit overwrites for teammates)  
-**Epic 5a–b** — Judge seat, public vote screen, judge number revisions, colored voter chips  
-**This slice** — Epic 5c: after voting, the judge applies the **majority** proposal to the shared city totals and opens the **next CSV scenario** (or finishes the session)  
-**Next** — Epic 6 (derived team scores + end-game role reveal)
+**Epic 5** — Judge seat, public vote, apply winner & next round / session complete  
+**This slice** — Epic 6a: on the final screen, **reveal every hidden role** and show each team as **team + bonus** (category score + met role bonuses)  
+**Next** — Epic 7 polish
 
 ---
 
@@ -39,7 +39,11 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 - See every seated player’s hidden role (loads on demand as the roster fills in)
 - Tap **+1m** next to the timer to add a minute — every device in the room sees the same countdown, not just your own
 - Tap **Move room to voting →** to move the whole room to the public vote screen
-- On the vote screen, tap **Apply winner & next round →** once there’s a clear majority — that proposal’s numbers are added to the shared city totals, votes clear, and everyone lands on the next scenario (Round 2 is already in the CSV). If that was the last round, the room shows a simple **session complete** screen instead
+- On the vote screen, tap **Apply winner & next round →** once there’s a clear majority — that proposal’s numbers are added to the shared city totals, votes clear, and everyone lands on the next scenario (Round 2 is already in the CSV). If that was the last round, the room shows the **session complete** screen
+
+**Session complete** — after the last round is applied:
+- Each team’s score is shown as **team + bonus** (e.g. `4 + 2`): team = that team’s two city categories; bonus = +1 for each of that team’s hidden roles whose condition was met against the final totals
+- Every player’s hidden role is revealed (name, rule, met / not met)
 
 The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
 
@@ -55,7 +59,7 @@ The discussion timer itself moved from a private per-tab mock to a single Firest
 ## Firebase setup (required)
 
 1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md)
-2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — this slice lets a judge **delete** votes when clearing the tally for the next round
+2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — this slice opens `secrets/{uid}` reads to everyone when `phase == "complete"` so the role reveal works on player devices
 3. `cp .env.local.example .env.local` and paste web keys, then `npm run dev`
 
 Without `.env.local`, the main screen shows a configuration error instead of rooms.
@@ -199,11 +203,10 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Explicitly not in this slice
 
-- Manual facilitator delta entry separate from the vote winner (winner’s numbers are applied as-is)  
+- A single combined “grand total” beyond the `team + bonus` display  
+- Manual facilitator delta entry separate from the vote winner  
 - A deadline/lock on voting  
 - Going back from voting to discussion without advancing  
-- End-game role reveal / hidden-role scoring (Epic 6)  
-- Derived Red/Blue team score summary beyond the five category chips  
 - Live keystroke sync (only **Submit** pushes to teammates)  
 - Proposal locking / turn-taking enforcement  
 - A cap on judges per room, and judges can't cast a vote themselves  
@@ -214,4 +217,4 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Suggested next increment
 
-**Epic 6:** show derived team scores from the five categories, and at session end reveal hidden roles and score their conditions once.
+**Epic 7:** empty/loading/error polish, mobile pass, and a fuller facilitator README.

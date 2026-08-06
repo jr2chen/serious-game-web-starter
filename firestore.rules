@@ -33,6 +33,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase in ['vote', 'complete'];
     }
 
+    function roomPhaseIsComplete(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'complete';
+    }
+
     // Only Red/Blue players cast a public vote — judges stay neutral.
     function isVotingEligible(roomId) {
       return myTeamInRoom(roomId) == 'red' || myTeamInRoom(roomId) == 'blue';
@@ -50,9 +54,12 @@ service cloud.firestore {
       allow delete: if isSelf(playerId);
     }
 
-    // Private hidden role — that player, or a judge in the same room, can read.
+    // Private hidden role — that player or a judge can read during play;
+    // everyone can read once the session is complete (the end-game reveal).
     match /rooms/{roomId}/secrets/{playerId} {
-      allow read: if isSelf(playerId) || isJudgeInRoom(roomId);
+      allow read: if isSelf(playerId)
+        || isJudgeInRoom(roomId)
+        || (signedIn() && roomPhaseIsComplete(roomId));
       allow write: if isSelf(playerId);
     }
 

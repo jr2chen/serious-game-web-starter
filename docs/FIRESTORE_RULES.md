@@ -15,14 +15,14 @@ Tick items off as you go (`[ ]` → `[x]`).
 | --- | --- |
 | `rooms/{code}` | Any signed-in user (read/write) — lobby metadata, shared timer, phase, scenario, city totals |
 | `rooms/{code}/players/{uid}` | Everyone signed-in can **read**; only that uid can **write** |
-| `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; only that uid can **write** |
+| `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; once `phase == "complete"`, anyone signed in can **read** (end-game reveal); only that uid can **write** |
 | `rooms/{code}/proposals/{team}` | That team's players and judges can always **read**; once `phase` is `"vote"` or `"complete"`, anyone signed in can **read** both; that team's players **or a judge** can **write** |
 | `rooms/{code}/votes/{uid}` | Any signed-in user can **read**; only seated `red`/`blue` players can **write** their own vote (with matching `voterTeam`); that player **or a judge** can **delete** (judges clear the tally when advancing rounds) |
 | Everything else | Denied |
 
 Anonymous Auth counts as signed in.
 
-**Important:** Republish rules after this change — judges can **delete** votes when advancing to the next round.
+**Important:** Republish rules after this change — when `phase == "complete"`, everyone can **read** `secrets/{uid}` for the end-game role reveal.
 
 ---
 
@@ -40,6 +40,7 @@ Anonymous Auth counts as signed in.
 - [ ] As a judge, revise a team's suggested numbers and **Save revision** — confirm that team's device sees the new numbers live, and the proposal text is untouched
 - [ ] Cast a vote as Red and as Blue on two devices — confirm each voter's chip on the vote screen is tinted by their own team color
 - [ ] With a clear majority, as judge tap **Apply winner & next round** — city totals update on every device, Round 2 scenario + fresh starters appear, votes clear; after the last round the session shows complete
+- [ ] On the complete screen, confirm every device sees all hidden roles and team scores as **team + bonus**
 
 ---
 
@@ -75,6 +76,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase in ['vote', 'complete'];
     }
 
+    function roomPhaseIsComplete(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'complete';
+    }
+
     function isVotingEligible(roomId) {
       return myTeamInRoom(roomId) == 'red' || myTeamInRoom(roomId) == 'blue';
     }
@@ -90,7 +95,9 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId}/secrets/{playerId} {
-      allow read: if isSelf(playerId) || isJudgeInRoom(roomId);
+      allow read: if isSelf(playerId)
+        || isJudgeInRoom(roomId)
+        || (signedIn() && roomPhaseIsComplete(roomId));
       allow write: if isSelf(playerId);
     }
 

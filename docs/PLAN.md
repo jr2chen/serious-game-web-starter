@@ -267,9 +267,22 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 6 — Scoring and end game (next)
+## Epic 6 — Scoring and end game
 
-Show derived team scores. At end game: reveal roles and score hidden-role conditions once.
+### Slice A — Role reveal + team + bonus (done)
+
+**Goal:** On the session-complete screen, reveal every hidden role and show each team’s score as **team + bonus**.
+
+**Stories:**
+- As anyone, when the session completes I see Red and Blue scored as `team + bonus` (category sum + met role bonuses)
+- As anyone, every player’s hidden role is revealed with whether its condition was met against the final city totals (+1 or 0)
+- As a developer, `secrets/{uid}` becomes readable to the whole room only when `phase == "complete"`
+
+**Done when:** After the last round is applied, a non-judge device sees both team scores and every role without a permission error.
+
+### Slice B — Polish (next)
+
+Empty/loading polish for the reveal; optional combined total display.
 
 ---
 
@@ -291,8 +304,8 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 8. Epic 5a — judge seat: both proposals, all roles, shared timer (done)
 9. Epic 5b — judge-triggered public vote screen, with judge number revisions + colored voter chips (done)
 10. Epic 5c — apply vote winner to city totals + advance scenario (done)
-11. **Epic 6** — derived team scores + end-game role reveal (next)
-12. Epic 7 — polish
+11. Epic 6a — end-game role reveal + team + bonus scores (done)
+12. Epic 7 — polish (next)
 
 ---
 

@@ -50,7 +50,12 @@ import {
   PROPOSAL_DELTA_LIMIT,
   TEAMS,
 } from "@/lib/game/constants";
-import { isTeamId, roleRuleLabel } from "@/lib/game/scoring";
+import {
+  isTeamId,
+  roleConditionMet,
+  roleRuleLabel,
+  teamCategoryScore,
+} from "@/lib/game/scoring";
 import {
   clearActiveRoom,
   readActiveRoomCode,
@@ -440,9 +445,13 @@ export default function CommonsApp() {
     });
   }, [team, teamProposals]);
 
-  /** Judge-only: fetch each roster player's hidden role on demand. */
+  /**
+   * Fetch hidden roles: judges can always read them; everyone else only
+   * once the session is complete (Firestore rules open secrets on complete).
+   */
   useEffect(() => {
-    if (screen !== "stage" || !selectedRoom || team !== "judge") return;
+    if (screen !== "stage" || !selectedRoom) return;
+    if (team !== "judge" && stagePhase !== "complete") return;
     const missing = roster.filter(
       (p) => p.team !== "judge" && !(p.id in rolesByPlayerId),
     );
@@ -468,7 +477,7 @@ export default function CommonsApp() {
     return () => {
       active = false;
     };
-  }, [screen, selectedRoom, team, roster, rolesByPlayerId]);
+  }, [screen, selectedRoom, team, roster, rolesByPlayerId, stagePhase]);
 
   /** Live room doc — timer, phase, city totals, and current scenario for everyone. */
   useEffect(() => {
@@ -1504,12 +1513,143 @@ export default function CommonsApp() {
               <>
                 <p className="label-mono mb-[10px] text-clay-deep">Session complete</p>
                 <h2 className="mb-2 font-display text-[24px] leading-[1.15] font-semibold">
-                  City totals after the final vote
+                  Final scores &amp; role reveal
                 </h2>
                 <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
-                  The judge applied the last round&apos;s winning proposal.
-                  Running category totals are shown in the bar above.
+                  Team score is that team&apos;s two city categories. Bonus is
+                  +1 per hidden role on the team whose condition was met.
+                  Shown as team + bonus.
                 </p>
+
+                {(["red", "blue"] as const).map((t) => {
+                  const teamScore = teamCategoryScore(categories, t);
+                  const members = roster.filter((p) => p.team === t);
+                  const bonus = members.reduce((sum, p) => {
+                    const role = rolesByPlayerId[p.id];
+                    if (!role) return sum;
+                    const met = roleConditionMet(
+                      categories[role.target_category],
+                      role.comparison,
+                      role.threshold,
+                    );
+                    return sum + (met ? 1 : 0);
+                  }, 0);
+                  const rolesReady = members.every((p) => p.id in rolesByPlayerId);
+
+                  return (
+                    <div key={t} className="card mb-3 p-4">
+                      <div className="mb-1 flex items-baseline justify-between gap-3">
+                        <span
+                          className={`text-[14px] font-semibold ${
+                            t === "red" ? "text-rust" : "text-team-blue"
+                          }`}
+                        >
+                          {TEAMS[t].name}
+                        </span>
+                        <span className="font-display text-[22px] font-semibold tabular-nums">
+                          {rolesReady ? (
+                            <>
+                              {teamScore}
+                              <span className="text-ink-soft"> + </span>
+                              {bonus}
+                            </>
+                          ) : (
+                            <span className="text-[14px] font-sans font-normal text-ink-soft">
+                              …
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-ink-soft">
+                        {TEAMS[t].goalLabel}
+                        {rolesReady
+                          ? ` · ${members.length} role${members.length === 1 ? "" : "s"}`
+                          : " · revealing roles…"}
+                      </p>
+                    </div>
+                  );
+                })}
+
+                <p className="label-mono mt-5 mb-2 text-clay-deep">
+                  Hidden roles revealed
+                </p>
+                <div className="flex flex-col gap-2">
+                  {roster.filter((p) => p.team !== "judge").length === 0 && (
+                    <p className="text-[13.5px] leading-[1.5] text-ink-soft">
+                      No players to reveal.
+                    </p>
+                  )}
+                  {roster
+                    .filter((p): p is typeof p & { team: TeamId } =>
+                      isTeamId(p.team),
+                    )
+                    .map((p) => {
+                      const role = rolesByPlayerId[p.id];
+                      const known = p.id in rolesByPlayerId;
+                      const met =
+                        role != null &&
+                        roleConditionMet(
+                          categories[role.target_category],
+                          role.comparison,
+                          role.threshold,
+                        );
+                      const categoryName =
+                        role != null
+                          ? (CATEGORIES.find((c) => c.id === role.target_category)
+                              ?.name ?? role.target_category)
+                          : "";
+
+                      return (
+                        <div key={p.id} className="card p-3">
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="text-[13.5px] font-semibold">
+                              <span aria-hidden>{p.emoji}</span> {p.displayName}
+                            </span>
+                            <span
+                              className={`font-mono text-[10px] ${
+                                p.team === "red" ? "text-rust" : "text-team-blue"
+                              }`}
+                            >
+                              {TEAMS[p.team].name}
+                            </span>
+                          </div>
+                          {!known ? (
+                            <p className="text-[12.5px] text-ink-soft">
+                              Revealing…
+                            </p>
+                          ) : role == null ? (
+                            <p className="text-[12.5px] text-ink-soft">
+                              No role on file.
+                            </p>
+                          ) : (
+                            <>
+                              <p className="mb-1 text-[13px] font-semibold text-ink">
+                                {role.role_name}
+                              </p>
+                              <p className="mb-2 text-[12px] leading-[1.45] text-ink-soft">
+                                {roleRuleLabel(
+                                  categoryName,
+                                  role.comparison,
+                                  role.threshold,
+                                )}{" "}
+                                · final {categoryName}{" "}
+                                {categories[role.target_category] > 0 ? "+" : ""}
+                                {categories[role.target_category]}
+                              </p>
+                              <p
+                                className={`font-mono text-[11px] ${
+                                  met ? "text-forest" : "text-ink-soft"
+                                }`}
+                              >
+                                {met ? "✓ Met · bonus +1" : "✗ Not met · bonus 0"}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+
                 {loadError && screen === "stage" && (
                   <p className={LOAD_ERROR}>{loadError}</p>
                 )}
