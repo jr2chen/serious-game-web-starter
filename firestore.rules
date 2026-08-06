@@ -25,7 +25,17 @@ service cloud.firestore {
         && myTeamInRoom(roomId) == teamId;
     }
 
-    // Public room metadata (lobby list, theme, counts, shared timer).
+    // Once a judge moves the room to voting, both proposals become public.
+    function roomPhaseIsVote(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'vote';
+    }
+
+    // Only Red/Blue players cast a public vote — judges stay neutral.
+    function isVotingEligible(roomId) {
+      return myTeamInRoom(roomId) == 'red' || myTeamInRoom(roomId) == 'blue';
+    }
+
+    // Public room metadata (lobby list, theme, counts, shared timer, phase).
     match /rooms/{roomId} {
       allow read, write: if signedIn();
     }
@@ -43,11 +53,22 @@ service cloud.firestore {
       allow write: if isSelf(playerId);
     }
 
-    // Shared team draft — that team's players, or a judge, can read;
-    // only that team's players can write (last Submit wins).
+    // Shared team draft — that team's players and judges can always read it;
+    // everyone else can once the room reaches the vote phase (the reveal).
+    // Only that team's players can write (last Submit wins).
     match /rooms/{roomId}/proposals/{teamId} {
-      allow read: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
+      allow read: if isTeammateProposal(roomId, teamId)
+        || isJudgeInRoom(roomId)
+        || (signedIn() && roomPhaseIsVote(roomId));
       allow write: if isTeammateProposal(roomId, teamId);
+    }
+
+    // Public vote for which proposal the city adopts — anyone can read;
+    // only seated Red/Blue players can cast one (last write wins).
+    match /rooms/{roomId}/votes/{playerId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(playerId) && isVotingEligible(roomId);
+      allow delete: if isSelf(playerId);
     }
 
     match /{document=**} {

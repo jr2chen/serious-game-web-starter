@@ -23,3 +23,9 @@ export async function ensureAnonymousUser(): Promise<User> {
   const result = await signInAnonymously(auth);
   return result.user;
 }
+
+/** This browser's anonymous uid — used to tell "my vote" apart from others. */
+export async function getMyUid(): Promise<string> {
+  const user = await ensureAnonymousUser();
+  return user.uid;
+}

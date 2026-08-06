@@ -13,15 +13,16 @@ Tick items off as you go (`[ ]` → `[x]`).
 
 | Path | Who can access |
 | --- | --- |
-| `rooms/{code}` | Any signed-in user (read/write) — lobby metadata + shared timer |
+| `rooms/{code}` | Any signed-in user (read/write) — lobby metadata, shared timer, phase |
 | `rooms/{code}/players/{uid}` | Everyone signed-in can **read**; only that uid can **write** |
 | `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; only that uid can **write** |
-| `rooms/{code}/proposals/{team}` | That team's players (`red` / `blue`), or a `judge`, can **read**; only that team's players can **write** |
+| `rooms/{code}/proposals/{team}` | That team's players and judges can always **read**; once `rooms/{code}.phase == "vote"`, anyone signed in can **read** both; only that team's players can **write** |
+| `rooms/{code}/votes/{uid}` | Any signed-in user can **read**; only seated `red`/`blue` players can **write** their own vote |
 | Everything else | Denied |
 
 Anonymous Auth counts as signed in.
 
-**Important:** Republish rules after this Epic 5 change — judges (a new `team: "judge"` roster value) can now read every `secrets/{uid}` doc and both `proposals/{team}` docs in their room, read-only.
+**Important:** Republish rules after this change — it adds the `votes` path and widens `proposals` reads to everyone once a judge starts the vote phase.
 
 ---
 
@@ -33,8 +34,9 @@ Anonymous Auth counts as signed in.
 - [ ] Refresh the app, create/join a room, confirm the live roster updates
 - [ ] Confirm another device sees your name/team but **not** your hidden role card text from their own role UI only
 - [ ] On stage, edit + **Submit revision** — a teammate’s phone should update the shared draft automatically
-- [ ] Confirm a red/blue player still cannot read the other team's proposal doc
+- [ ] Confirm a red/blue player still cannot read the other team's proposal doc before voting starts
 - [ ] Join as a `judge` seat — confirm you can read both teams' proposals and every player's hidden role, and can add time to the shared timer
+- [ ] As a judge, tap **Move room to voting** — confirm a red/blue device now sees both proposals and can cast a public vote; confirm the judge device cannot cast a vote
 
 ---
 
@@ -66,6 +68,14 @@ service cloud.firestore {
         && myTeamInRoom(roomId) == teamId;
     }
 
+    function roomPhaseIsVote(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'vote';
+    }
+
+    function isVotingEligible(roomId) {
+      return myTeamInRoom(roomId) == 'red' || myTeamInRoom(roomId) == 'blue';
+    }
+
     match /rooms/{roomId} {
       allow read, write: if signedIn();
     }
@@ -82,8 +92,16 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId}/proposals/{teamId} {
-      allow read: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
+      allow read: if isTeammateProposal(roomId, teamId)
+        || isJudgeInRoom(roomId)
+        || (signedIn() && roomPhaseIsVote(roomId));
       allow write: if isTeammateProposal(roomId, teamId);
+    }
+
+    match /rooms/{roomId}/votes/{playerId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(playerId) && isVotingEligible(roomId);
+      allow delete: if isSelf(playerId);
     }
 
     match /{document=**} {
@@ -110,6 +128,7 @@ service cloud.firestore {
 rooms/{CODE}
   code, themeId, themeName, createdAt, createdBy, playerCount
   timerEndsAtMs   // shared discussion countdown target (epoch ms); set on stage entry, judges can extend it
+  phase           // "discuss" (default) | "vote" — a judge flips this to reveal both proposals
 
 rooms/{CODE}/players/{uid}          // public roster
   displayName, emoji, team, joinedAt   // team is "red" | "blue" | "judge"
@@ -121,4 +140,8 @@ rooms/{CODE}/proposals/{red|blue}   // shared team draft (last Submit wins)
   team, scenario_id, proposal_text,
   jobs, housing, accessibility, climate, cost,   // each −4…+4 (revision range)
   updatedAt, updatedByUid, updatedByName
+
+rooms/{CODE}/votes/{uid}            // one public vote per red/blue player (last write wins)
+  choice,          // "red" | "blue" — which proposal this player wants adopted
+  displayName, emoji, updatedAt
 ```

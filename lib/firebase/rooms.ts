@@ -56,6 +56,7 @@ function roomFromDoc(
     typeof data.createdBy === "string" ? data.createdBy : "unknown";
   const timerEndsAtMs =
     typeof data.timerEndsAtMs === "number" ? data.timerEndsAtMs : undefined;
+  const phase = data.phase === "vote" ? "vote" : "discuss";
 
   return {
     id,
@@ -68,6 +69,7 @@ function roomFromDoc(
     createdBy,
     playerCount,
     timerEndsAtMs,
+    phase,
   };
 }
 
@@ -200,4 +202,11 @@ export async function addRoomTime(
   await updateDoc(doc(db, ROOMS, roomCode), {
     timerEndsAtMs: increment(extraSeconds * 1000),
   });
+}
+
+/** Judge control — moves everyone from discussion to the public vote screen. */
+export async function startVotingPhase(roomCode: string): Promise<void> {
+  await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  await updateDoc(doc(db, ROOMS, roomCode), { phase: "vote" });
 }

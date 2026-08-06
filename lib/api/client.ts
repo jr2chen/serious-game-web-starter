@@ -2,6 +2,7 @@ import type {
   CategoryId,
   CategoryTotals,
   HiddenRole,
+  ProposalVote,
   Room,
   RoomPlayer,
   Scenario,
@@ -12,12 +13,14 @@ import type {
   ThemeId,
 } from "@/lib/game/types";
 import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
+import { getMyUid } from "@/lib/firebase/auth";
 import {
   addRoomTime,
   createRoom as createFirestoreRoom,
   ensureRoomTimer,
   getRoom as getFirestoreRoom,
   listRecentRooms,
+  startVotingPhase,
   subscribeToRoom,
 } from "@/lib/firebase/rooms";
 import {
@@ -32,6 +35,7 @@ import {
   submitTeamProposal,
   subscribeToTeamProposal,
 } from "@/lib/firebase/proposals";
+import { castVote, subscribeToVotes } from "@/lib/firebase/votes";
 import type { Unsubscribe } from "firebase/firestore";
 
 /** Browser client for game content and rooms. */
@@ -71,6 +75,11 @@ export async function loadMySeat(
   roomCode: string,
 ): Promise<PlayerSeat | null> {
   return getMySeatInRoom(roomCode);
+}
+
+/** This browser's anonymous uid — used to tell "my vote" apart from others. */
+export async function loadMyUid(): Promise<string> {
+  return getMyUid();
 }
 
 export async function loadRoleForPlayer(
@@ -113,6 +122,11 @@ export async function extendRoomTimer(
   return addRoomTime(roomCode, extraSeconds);
 }
 
+/** Judge-only control — moves everyone to the public proposal vote. */
+export async function startVoting(roomCode: string): Promise<void> {
+  return startVotingPhase(roomCode);
+}
+
 export async function seedTeamProposal(input: {
   roomCode: string;
   starter: StarterProposal;
@@ -139,6 +153,25 @@ export async function watchTeamProposal(
   onError?: (error: Error) => void,
 ): Promise<Unsubscribe> {
   return subscribeToTeamProposal(roomCode, team, onChange, onError);
+}
+
+/** Casts (or changes) this browser's public vote — Red/Blue players only. */
+export async function castProposalVote(input: {
+  roomCode: string;
+  choice: TeamId;
+  displayName: string;
+  emoji: string;
+}): Promise<void> {
+  return castVote(input);
+}
+
+/** Live, public vote tally for the room. */
+export async function watchVotes(
+  roomCode: string,
+  onChange: (votes: ProposalVote[]) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToVotes(roomCode, onChange, onError);
 }
 
 export async function getScenario(_roomId?: string): Promise<Scenario> {

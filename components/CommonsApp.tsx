@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import QRCode from "react-qr-code";
 import {
   assignHiddenRole,
+  castProposalVote,
   createRoom,
   enterRoom,
   extendRoomTimer,
@@ -13,19 +14,23 @@ import {
   getStarterProposal,
   listRooms,
   loadMySeat,
+  loadMyUid,
   loadRoleForPlayer,
   saveTeamProposal,
   seedTeamProposal,
   startRoomTimer,
+  startVoting,
   watchRoom,
   watchRoomPlayers,
   watchTeamProposal,
+  watchVotes,
 } from "@/lib/api/client";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import type {
   CategoryId,
   CategoryTotals,
   HiddenRole,
+  ProposalVote,
   Room,
   RoomPlayer,
   Scenario,
@@ -183,6 +188,16 @@ export default function CommonsApp() {
   const [rolesByPlayerId, setRolesByPlayerId] = useState<
     Record<string, HiddenRole | null>
   >({});
+  /** "discuss" until a judge moves the whole room to the public vote. */
+  const [stagePhase, setStagePhase] = useState<"discuss" | "vote">("discuss");
+  const [startingVote, setStartingVote] = useState(false);
+  /** Live, public votes for which team's proposal the city should adopt. */
+  const [votes, setVotes] = useState<ProposalVote[]>([]);
+  const [expandedProposals, setExpandedProposals] = useState<
+    Record<TeamId, boolean>
+  >({ red: false, blue: false });
+  /** This browser's uid — lets us highlight "your vote" among public votes. */
+  const [myUid, setMyUid] = useState<string | null>(null);
   /** Current page URL for the main-screen QR (preview / prod / localhost). */
   const [pageUrl, setPageUrl] = useState("");
 
@@ -313,9 +328,15 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom, team]);
 
-  /** Judge-only: watch both teams' drafts, read-only. */
+  /**
+   * Watch both teams' drafts, read-only. Judges always get this; everyone
+   * else only once the room reaches the vote phase (the reveal) — the
+   * Firestore rules deny the read before then, so this stays gated to avoid
+   * a spurious permission error on every red/blue device.
+   */
   useEffect(() => {
-    if (screen !== "stage" || !selectedRoom || team !== "judge") return;
+    if (screen !== "stage" || !selectedRoom) return;
+    if (team !== "judge" && stagePhase !== "vote") return;
 
     let active = true;
     const unsubs: Array<() => void> = [];
@@ -343,7 +364,7 @@ export default function CommonsApp() {
       active = false;
       unsubs.forEach((unsub) => unsub());
     };
-  }, [screen, selectedRoom, team]);
+  }, [screen, selectedRoom, team, stagePhase]);
 
   /** Judge-only: fetch each roster player's hidden role on demand. */
   useEffect(() => {
@@ -375,7 +396,7 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom, team, roster, rolesByPlayerId]);
 
-  /** Live room doc — keeps the shared discussion timer in sync for everyone. */
+  /** Live room doc — keeps the shared timer and vote phase in sync for everyone. */
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom) return;
 
@@ -385,9 +406,9 @@ export default function CommonsApp() {
     void watchRoom(
       selectedRoom.code,
       (room) => {
-        if (active && room?.timerEndsAtMs) {
-          setTimerEndsAtMs(room.timerEndsAtMs);
-        }
+        if (!active) return;
+        if (room?.timerEndsAtMs) setTimerEndsAtMs(room.timerEndsAtMs);
+        setStagePhase(room?.phase === "vote" ? "vote" : "discuss");
       },
       (error) => {
         if (active) setLoadError(error.message);
@@ -405,6 +426,38 @@ export default function CommonsApp() {
       unsub?.();
     };
   }, [screen, selectedRoom]);
+
+  /** Live, public vote tally — only relevant once voting has started. */
+  useEffect(() => {
+    if (screen !== "stage" || !selectedRoom || stagePhase !== "vote") {
+      setVotes([]);
+      return;
+    }
+
+    let active = true;
+    let unsub: (() => void) | undefined;
+
+    void watchVotes(
+      selectedRoom.code,
+      (nextVotes) => {
+        if (active) setVotes(nextVotes);
+      },
+      (error) => {
+        if (active) setLoadError(error.message);
+      },
+    ).then((unsubscribe) => {
+      if (!active) {
+        unsubscribe();
+        return;
+      }
+      unsub = unsubscribe;
+    });
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [screen, selectedRoom, stagePhase]);
 
   /** Ticks once a second so the synced countdown below re-renders. */
   useEffect(() => {
@@ -441,6 +494,11 @@ export default function CommonsApp() {
     setScoreInfoOpen(false);
     setTeamProposals({ red: null, blue: null });
     setRolesByPlayerId({});
+    setStagePhase("discuss");
+    setStartingVote(false);
+    setVotes([]);
+    setExpandedProposals({ red: false, blue: false });
+    setMyUid(null);
     void refreshRooms();
   }
 
@@ -526,10 +584,10 @@ export default function CommonsApp() {
         setDraftUpdatedAtMs(seeded.updatedAtMs);
       }
 
-      const endsAtMs = await startRoomTimer(
-        selectedRoom.code,
-        nextScenario.discussion_seconds,
-      );
+      const [endsAtMs, uid] = await Promise.all([
+        startRoomTimer(selectedRoom.code, nextScenario.discussion_seconds),
+        loadMyUid(),
+      ]);
 
       setName(displayName);
       setEmoji(mark);
@@ -538,6 +596,7 @@ export default function CommonsApp() {
       setHiddenRole(role);
       setCategories(totals);
       setTimerEndsAtMs(endsAtMs);
+      setMyUid(uid);
       rememberActiveRoom(selectedRoom.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -591,10 +650,10 @@ export default function CommonsApp() {
         setDraftUpdatedAtMs(seeded.updatedAtMs);
       }
 
-      const endsAtMs = await startRoomTimer(
-        room.code,
-        nextScenario.discussion_seconds,
-      );
+      const [endsAtMs, uid] = await Promise.all([
+        startRoomTimer(room.code, nextScenario.discussion_seconds),
+        loadMyUid(),
+      ]);
 
       setSelectedRoom(room);
       setName(seat.player.displayName);
@@ -605,6 +664,7 @@ export default function CommonsApp() {
       setHiddenRole(seat.role);
       setCategories(totals);
       setTimerEndsAtMs(endsAtMs);
+      setMyUid(uid);
       rememberActiveRoom(room.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -627,6 +687,43 @@ export default function CommonsApp() {
         error instanceof Error ? error.message : "Could not add time",
       );
     }
+  }
+
+  /** Judge-only control — moves the whole room to the public vote screen. */
+  async function moveToVoting() {
+    if (!selectedRoom) return;
+    setStartingVote(true);
+    setLoadError(null);
+    try {
+      await startVoting(selectedRoom.code);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not start voting",
+      );
+    } finally {
+      setStartingVote(false);
+    }
+  }
+
+  /** Casts or changes this player's public vote — Red/Blue only. */
+  async function voteForProposal(choice: TeamId) {
+    if (!selectedRoom || isJudge) return;
+    try {
+      await castProposalVote({
+        roomCode: selectedRoom.code,
+        choice,
+        displayName: name.trim() || "Player",
+        emoji: emoji ?? "🙂",
+      });
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not cast vote",
+      );
+    }
+  }
+
+  function toggleProposalExpanded(t: TeamId) {
+    setExpandedProposals((prev) => ({ ...prev, [t]: !prev[t] }));
   }
 
   async function submitProposalRevision() {
@@ -1164,6 +1261,151 @@ export default function CommonsApp() {
             )}
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-[18px] pb-6">
+              {stagePhase === "vote" ? (
+              <>
+                <p className="label-mono mb-[10px] text-clay-deep">Voting</p>
+                <h2 className="mb-2 font-display text-[24px] leading-[1.15] font-semibold">
+                  Which proposal should the city adopt?
+                </h2>
+                <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
+                  Votes are public — tap a proposal to read it in full.{" "}
+                  {isJudge
+                    ? "Judges don't vote."
+                    : "Tap a team name to cast or change your vote."}
+                </p>
+
+                {(["red", "blue"] as const).map((t) => {
+                  const draft = teamProposals[t];
+                  const expanded = expandedProposals[t];
+                  const votesForTeam = votes.filter((v) => v.choice === t);
+                  const iVotedHere =
+                    myUid != null &&
+                    votes.some(
+                      (v) => v.playerId === myUid && v.choice === t,
+                    );
+                  const teamTint = t === "red" ? "text-rust" : "text-team-blue";
+                  const teamBorderTint =
+                    t === "red" ? "border-rust" : "border-team-blue";
+
+                  return (
+                    <div
+                      key={t}
+                      className={`card mb-4 overflow-hidden ${
+                        iVotedHere ? teamBorderTint : ""
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-[14px] text-left font-sans text-inherit"
+                        onClick={() => toggleProposalExpanded(t)}
+                        aria-expanded={expanded}
+                      >
+                        <span className={`text-[14.5px] font-semibold ${teamTint}`}>
+                          {TEAMS[t].name}
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] text-ink-soft">
+                            {votesForTeam.length}{" "}
+                            {votesForTeam.length === 1 ? "vote" : "votes"}
+                          </span>
+                          <span
+                            className="text-[10px] text-ink-soft"
+                            aria-hidden
+                          >
+                            {expanded ? "▴" : "▾"}
+                          </span>
+                        </span>
+                      </button>
+
+                      <div className="px-4 pb-4">
+                        <p
+                          className={`mb-3 text-[13px] leading-[1.5] text-ink ${
+                            expanded ? "whitespace-pre-wrap" : "truncate"
+                          }`}
+                        >
+                          {draft?.proposal_text ||
+                            "Waiting for this team's draft…"}
+                        </p>
+
+                        <p className="label-mono mb-1">
+                          If adopted, revised totals
+                        </p>
+                        <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1">
+                          {categories &&
+                            CATEGORIES.map((cat) => {
+                              const base = categories[cat.id];
+                              const value = base + (draft ? draft[cat.id] : 0);
+                              return (
+                                <span key={cat.id} className="chip">
+                                  <span className="text-ink-soft">
+                                    {SCORE_ABBR[cat.id]}
+                                  </span>
+                                  <span
+                                    className={
+                                      value > base
+                                        ? "text-forest"
+                                        : value < base
+                                          ? "text-rust"
+                                          : ""
+                                    }
+                                  >
+                                    {value > 0 ? "+" : ""}
+                                    {value}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                        </div>
+
+                        {expanded && (
+                          <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
+                            {DELTA_KEYS.map((key) => (
+                              <span key={key} className="chip">
+                                <span className="text-ink-soft">
+                                  {SCORE_ABBR[key]}
+                                </span>
+                                <span>
+                                  {formatDelta(draft ? draft[key] : 0)}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {votesForTeam.length > 0 && (
+                          <div className="mb-3 flex flex-wrap gap-1">
+                            {votesForTeam.map((v) => (
+                              <span
+                                key={v.playerId}
+                                className="inline-flex items-center gap-1 rounded-full border border-line bg-paper-deep px-[8px] py-[3px] text-[11px]"
+                              >
+                                <span aria-hidden>{v.emoji}</span>
+                                <span>{v.displayName}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {!isJudge && (
+                          <button
+                            type="button"
+                            className={iVotedHere ? "btn btn-primary" : "btn btn-secondary"}
+                            onClick={() => void voteForProposal(t)}
+                          >
+                            {iVotedHere ? "✓ Your vote" : `Vote ${TEAMS[t].name}`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {loadError && screen === "stage" && (
+                  <p className={LOAD_ERROR}>{loadError}</p>
+                )}
+              </>
+              ) : (
+              <>
               <p className="label-mono mb-[10px] text-rust">
                 Round {scenario.round_order}
               </p>
@@ -1186,6 +1428,24 @@ export default function CommonsApp() {
 
               {isJudge ? (
                 <>
+                  <div className="card mb-4 border-clay-deep bg-[var(--tint-clay-soft)] p-4">
+                    <p className="mb-1 text-[13.5px] font-semibold text-clay-deep">
+                      Ready to vote?
+                    </p>
+                    <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
+                      Moves everyone to a shared screen with both proposals,
+                      revised scores, and a public vote.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={startingVote}
+                      onClick={() => void moveToVoting()}
+                    >
+                      {startingVote ? "Starting…" : "Move room to voting →"}
+                    </button>
+                  </div>
+
                   <p className="label-mono mb-2 text-clay-deep">
                     Both team proposals
                   </p>
@@ -1367,6 +1627,8 @@ export default function CommonsApp() {
                     </div>
                   </>
                 )
+              )}
+              </>
               )}
             </div>
 

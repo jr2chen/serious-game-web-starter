@@ -85,6 +85,8 @@ export type Room = {
   playerCount: number;
   /** Shared discussion countdown target (epoch ms); unset until stage starts. */
   timerEndsAtMs?: number;
+  /** "discuss" (default) until a judge moves the room to the public vote. */
+  phase?: "discuss" | "vote";
 };
 
 export type RoomPlayer = {
@@ -93,6 +95,15 @@ export type RoomPlayer = {
   emoji: string;
   team: SeatRole;
   joinedAtMs: number;
+};
+
+/** One player's public vote for which team's proposal the city should adopt. */
+export type ProposalVote = {
+  playerId: string;
+  choice: TeamId;
+  displayName: string;
+  emoji: string;
+  updatedAtMs: number;
 };
 
 export type ThemeId = "municipal";
