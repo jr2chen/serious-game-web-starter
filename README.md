@@ -35,11 +35,11 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 **Judge** — a neutral, non-scoring seat:
 - No hidden role, no proposal of your own
 - See **both** teams’ live drafts on stage
-- Nudge either team’s five suggested numbers (±4) and tap **Save revision** — the team’s own wording is never touched, and they see your revision live, same as a teammate’s Submit
+- Edit either team’s proposal **text and numbers** (±4), then **Save revision** — teammates see it live
 - See every seated player’s hidden role (loads on demand as the roster fills in)
 - Tap **+1m** next to the timer to add a minute — every device in the room sees the same countdown, not just your own
 - Tap **Move room to voting →** to move the whole room to the public vote screen
-- On the vote screen, tap **Apply winner & next round →** once there’s a clear majority — that proposal’s numbers are added to the shared city totals, votes clear, and everyone lands on the next scenario (Round 2 is already in the CSV). If that was the last round, the room shows the **session complete** screen
+- On the vote screen, keep editing either proposal; when ready, **Adopt Red** or **Adopt Blue** (public tally is advisory) — that proposal’s numbers update the city, votes clear, and everyone lands on the next scenario (or **session complete** after the last round)
 
 **Session complete** — after the last round is applied:
 - A **team scoreboard** on top — each team as **team + bonus** (category total + sum of that team’s met role bonuses)

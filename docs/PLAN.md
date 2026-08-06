@@ -255,15 +255,15 @@ Join/create → name + emoji → stage with one mock scenario.
 **Goal:** After the public vote, a judge applies the winning proposal to the city's running totals and opens the next CSV scenario (or finishes the session).
 
 **Stories:**
-- As a judge on the vote screen, I have **Apply winner & next round →**
-- As anyone, that applies the **majority** proposal's suggested numbers to shared `categoryTotals` on the room
+- As a judge on the vote screen, I **pick** Red or Blue to adopt (public tally is advisory — ties are fine)
+- As a judge, I can edit either proposal’s **text and numbers** during discuss and during voting
+- As anyone, the adopted proposal’s numbers update shared `categoryTotals` on the room
 - As anyone, if another scenario exists in CSV, everyone returns to **discuss** with that scenario, fresh starter proposals, cleared votes, and a restarted timer
 - As anyone, if that was the last scenario, the room moves to **complete** with final city totals
-- As a judge, a **tie** (or zero votes) blocks advance until the tally is clear
 
-**Keep simple:** No manual facilitator delta entry separate from the winning proposal; no role reveal / end-game scoring yet.
+**Keep simple:** No automatic majority winner; the judge always chooses.
 
-**Done when:** After Round 1 voting, a judge tap updates city chips on a second device and flips everyone to Round 2's scenario + blank-slate starters.
+**Done when:** After Round 1 voting, a judge adopts a team and city chips update on a second device, then everyone flips to Round 2's scenario + blank-slate starters.
 
 ---
 

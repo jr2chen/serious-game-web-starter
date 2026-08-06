@@ -17,7 +17,6 @@ import {
   loadMySeat,
   loadMyUid,
   loadRoleForPlayer,
-  reviseTeamProposal,
   saveTeamProposal,
   seedRoomRound,
   seedTeamProposal,
@@ -216,7 +215,11 @@ export default function CommonsApp() {
   const [rolesByPlayerId, setRolesByPlayerId] = useState<
     Record<string, HiddenRole | null>
   >({});
-  /** Judge-only: in-progress number edits per team, before Save revision. */
+  /** Judge-only: in-progress text + number edits per team, before Save. */
+  const [judgeDraftText, setJudgeDraftText] = useState<Record<TeamId, string>>({
+    red: "",
+    blue: "",
+  });
   const [judgeDraftDeltas, setJudgeDraftDeltas] = useState<
     Record<TeamId, Record<CategoryId, number>>
   >({ red: EMPTY_DELTAS, blue: EMPTY_DELTAS });
@@ -423,11 +426,20 @@ export default function CommonsApp() {
   }, [screen, selectedRoom, team, stagePhase]);
 
   /**
-   * Judge-only: keep the editable draft numbers in sync with the live
-   * proposal — mirrors how a team's own draftDeltas track their own draft.
+   * Judge-only: keep editable text + numbers in sync with the live
+   * proposals — mirrors how a team's own drafts track Submit.
    */
   useEffect(() => {
     if (team !== "judge") return;
+    setJudgeDraftText((prev) => {
+      const next = { ...prev };
+      for (const t of ["red", "blue"] as const) {
+        const draft = teamProposals[t];
+        if (!draft) continue;
+        next[t] = draft.proposal_text;
+      }
+      return next;
+    });
     setJudgeDraftDeltas((prev) => {
       const next = { ...prev };
       for (const t of ["red", "blue"] as const) {
@@ -630,6 +642,7 @@ export default function CommonsApp() {
     setScoreInfoOpen(false);
     setTeamProposals({ red: null, blue: null });
     setRolesByPlayerId({});
+    setJudgeDraftText({ red: "", blue: "" });
     setJudgeDraftDeltas({ red: EMPTY_DELTAS, blue: EMPTY_DELTAS });
     setSavingJudgeRevision({ red: false, blue: false });
     setStagePhase("discuss");
@@ -857,33 +870,38 @@ export default function CommonsApp() {
   }
 
   /**
-   * Judge-only: apply the vote-winning proposal's deltas to the shared city
-   * totals, then open the next CSV scenario (or finish if there isn't one).
+   * Judge-only: adopt the chosen team's current numbers into city totals,
+   * then open the next CSV scenario (or finish if there isn't one).
+   * The public vote tally is advisory — the judge picks.
    */
-  async function applyWinnerAndAdvance() {
+  async function applyWinnerAndAdvance(winningTeam: TeamId) {
     if (!selectedRoom || !isJudge || !categories || !scenario) return;
 
-    const redCount = votes.filter((v) => v.choice === "red").length;
-    const blueCount = votes.filter((v) => v.choice === "blue").length;
-    if (redCount === 0 && blueCount === 0) {
-      setLoadError("No votes yet — wait for players to vote.");
-      return;
-    }
-    if (redCount === blueCount) {
-      setLoadError("Tie vote — need a clear majority before advancing.");
+    const draft = teamProposals[winningTeam];
+    if (!draft) {
+      setLoadError(`${TEAMS[winningTeam].name} has no proposal draft yet.`);
       return;
     }
 
-    const winningTeam: TeamId = redCount > blueCount ? "red" : "blue";
-    const draft = teamProposals[winningTeam];
-    if (!draft) {
-      setLoadError("Winning team has no proposal draft yet.");
+    const text = judgeDraftText[winningTeam].trim();
+    if (!text) {
+      setLoadError("Proposal text cannot be empty — edit it before adopting.");
       return;
     }
 
     setAdvancingRound(true);
     setLoadError(null);
     try {
+      // Persist any unsaved judge edits so the adopted numbers match the UI.
+      await saveTeamProposal({
+        roomCode: selectedRoom.code,
+        team: winningTeam,
+        scenarioId: draft.scenario_id,
+        proposalText: text,
+        deltas: judgeDraftDeltas[winningTeam],
+        displayName: `Judge · ${name.trim() || "Player"}`,
+      });
+
       const next = await getNextScenario(scenario.round_order);
       let nextStarters: {
         red: StarterProposal;
@@ -901,13 +919,7 @@ export default function CommonsApp() {
         roomCode: selectedRoom.code,
         winningTeam,
         currentTotals: categories,
-        winningDeltas: {
-          jobs: draft.jobs,
-          housing: draft.housing,
-          accessibility: draft.accessibility,
-          climate: draft.climate,
-          cost: draft.cost,
-        },
+        winningDeltas: judgeDraftDeltas[winningTeam],
         nextScenario: next,
         nextStarters,
         judgeName: name.trim() || "Player",
@@ -982,17 +994,21 @@ export default function CommonsApp() {
     }));
   }
 
-  /** Judge-only: pushes revised numbers live — that team's text is untouched. */
+  /** Judge-only: pushes revised text + numbers live (full overwrite). */
   async function saveJudgeRevision(t: TeamId) {
     if (!selectedRoom || !isJudge) return;
+    const draft = teamProposals[t];
+    if (!draft) return;
     setSavingJudgeRevision((prev) => ({ ...prev, [t]: true }));
     setLoadError(null);
     try {
-      await reviseTeamProposal({
+      await saveTeamProposal({
         roomCode: selectedRoom.code,
         team: t,
+        scenarioId: draft.scenario_id,
+        proposalText: judgeDraftText[t],
         deltas: judgeDraftDeltas[t],
-        revisedByName: `Judge · ${name.trim() || "Player"}`,
+        displayName: `Judge · ${name.trim() || "Player"}`,
       });
     } catch (error) {
       setLoadError(
@@ -1700,7 +1716,7 @@ export default function CommonsApp() {
                 <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
                   Votes are public — tap a proposal to read it in full.{" "}
                   {isJudge
-                    ? "Judges don't vote."
+                    ? "Judges don't vote — edit either proposal, then adopt one below."
                     : "Tap a team name to cast or change your vote."}
                 </p>
 
@@ -1748,64 +1764,29 @@ export default function CommonsApp() {
                       </button>
 
                       <div className="px-4 pb-4">
-                        <p
-                          className={`mb-3 text-[13px] leading-[1.5] text-ink ${
-                            expanded ? "whitespace-pre-wrap" : "truncate"
-                          }`}
-                        >
-                          {draft?.proposal_text ||
-                            "Waiting for this team's draft…"}
-                        </p>
-
-                        <p className="label-mono mb-1">
-                          If adopted, revised totals
-                        </p>
-                        <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1">
-                          {categories &&
-                            CATEGORIES.map((cat) => {
-                              const base = categories[cat.id];
-                              const value = base + (draft ? draft[cat.id] : 0);
-                              return (
-                                <span key={cat.id} className="chip">
-                                  <span className="text-ink-soft">
-                                    {SCORE_ABBR[cat.id]}
-                                  </span>
-                                  <span
-                                    className={
-                                      value > base
-                                        ? "text-forest"
-                                        : value < base
-                                          ? "text-rust"
-                                          : ""
-                                    }
-                                  >
-                                    {value > 0 ? "+" : ""}
-                                    {value}
-                                  </span>
-                                </span>
-                              );
-                            })}
-                        </div>
-
-                        {expanded && !isJudge && (
-                          <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
-                            {DELTA_KEYS.map((key) => (
-                              <span key={key} className="chip">
-                                <span className="text-ink-soft">
-                                  {SCORE_ABBR[key]}
-                                </span>
-                                <span>
-                                  {formatDelta(draft ? draft[key] : 0)}
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {expanded && isJudge && draft && (
+                        {isJudge && draft ? (
                           <>
+                            <label
+                              className="mb-1 block font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase"
+                              htmlFor={`judge-vote-text-${t}`}
+                            >
+                              Proposal text
+                            </label>
+                            <textarea
+                              id={`judge-vote-text-${t}`}
+                              className="mb-3 min-h-[120px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
+                              value={judgeDraftText[t]}
+                              onChange={(e) =>
+                                setJudgeDraftText((prev) => ({
+                                  ...prev,
+                                  [t]: e.target.value,
+                                }))
+                              }
+                              maxLength={2000}
+                              rows={5}
+                            />
                             <p className="mb-1 font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
-                              Revise suggested changes
+                              Suggested category changes
                             </p>
                             <div className="no-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
                               {DELTA_KEYS.map((key) => (
@@ -1849,6 +1830,65 @@ export default function CommonsApp() {
                                 : "Save revision"}
                             </button>
                           </>
+                        ) : (
+                          <p
+                            className={`mb-3 text-[13px] leading-[1.5] text-ink ${
+                              expanded ? "whitespace-pre-wrap" : "truncate"
+                            }`}
+                          >
+                            {draft?.proposal_text ||
+                              "Waiting for this team's draft…"}
+                          </p>
+                        )}
+
+                        <p className="label-mono mb-1">
+                          If adopted, revised totals
+                        </p>
+                        <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1">
+                          {categories &&
+                            CATEGORIES.map((cat) => {
+                              const base = categories[cat.id];
+                              const delta = isJudge
+                                ? judgeDraftDeltas[t][cat.id]
+                                : draft
+                                  ? draft[cat.id]
+                                  : 0;
+                              const value = base + delta;
+                              return (
+                                <span key={cat.id} className="chip">
+                                  <span className="text-ink-soft">
+                                    {SCORE_ABBR[cat.id]}
+                                  </span>
+                                  <span
+                                    className={
+                                      value > base
+                                        ? "text-forest"
+                                        : value < base
+                                          ? "text-rust"
+                                          : ""
+                                    }
+                                  >
+                                    {value > 0 ? "+" : ""}
+                                    {value}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                        </div>
+
+                        {expanded && !isJudge && (
+                          <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
+                            {DELTA_KEYS.map((key) => (
+                              <span key={key} className="chip">
+                                <span className="text-ink-soft">
+                                  {SCORE_ABBR[key]}
+                                </span>
+                                <span>
+                                  {formatDelta(draft ? draft[key] : 0)}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
                         )}
 
                         {votesForTeam.length > 0 && (
@@ -1887,24 +1927,40 @@ export default function CommonsApp() {
                 {isJudge && (
                   <div className="card mb-4 border-clay-deep bg-[var(--tint-clay-soft)] p-4">
                     <p className="mb-1 text-[13.5px] font-semibold text-clay-deep">
-                      Ready for the next round?
+                      Adopt a proposal &amp; continue
                     </p>
-                    <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
-                      Applies the vote-winning proposal&apos;s numbers to the
-                      city totals, clears votes, and opens the next scenario
-                      (or finishes the session if this was the last round).
-                      Needs a clear majority — ties won&apos;t advance.
+                    <p className="mb-2 text-[12.5px] leading-[1.45] text-ink-soft">
+                      You pick which proposal&apos;s numbers update the city —
+                      the public tally below is only advisory. Then everyone
+                      moves to the next scenario (or the session ends).
                     </p>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={advancingRound}
-                      onClick={() => void applyWinnerAndAdvance()}
-                    >
-                      {advancingRound
-                        ? "Advancing…"
-                        : "Apply winner & next round →"}
-                    </button>
+                    <p className="mb-3 font-mono text-[11px] text-ink-soft">
+                      Public tally — Red{" "}
+                      {votes.filter((v) => v.choice === "red").length} · Blue{" "}
+                      {votes.filter((v) => v.choice === "blue").length}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={advancingRound || !teamProposals.red}
+                        onClick={() => void applyWinnerAndAdvance("red")}
+                      >
+                        {advancingRound
+                          ? "Advancing…"
+                          : "Adopt Red Team →"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={advancingRound || !teamProposals.blue}
+                        onClick={() => void applyWinnerAndAdvance("blue")}
+                      >
+                        {advancingRound
+                          ? "Advancing…"
+                          : "Adopt Blue Team →"}
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1958,9 +2014,8 @@ export default function CommonsApp() {
                     Both team proposals
                   </p>
                   <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
-                    Their text is theirs to write — but you can revise the
-                    suggested numbers below and Save to push your revision
-                    live.
+                    You can edit either team&apos;s text and suggested numbers,
+                    then Save to push your revision live.
                   </p>
                   {(["red", "blue"] as const).map((t) => {
                     const draft = teamProposals[t];
@@ -1982,9 +2037,25 @@ export default function CommonsApp() {
                         </div>
                         {draft ? (
                           <>
-                            <p className="mb-3 whitespace-pre-wrap text-sm leading-[1.55] text-ink">
-                              {draft.proposal_text || "(no text yet)"}
-                            </p>
+                            <label
+                              className="mb-1 block font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase"
+                              htmlFor={`judge-discuss-text-${t}`}
+                            >
+                              Proposal text
+                            </label>
+                            <textarea
+                              id={`judge-discuss-text-${t}`}
+                              className="mb-3 min-h-[140px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
+                              value={judgeDraftText[t]}
+                              onChange={(e) =>
+                                setJudgeDraftText((prev) => ({
+                                  ...prev,
+                                  [t]: e.target.value,
+                                }))
+                              }
+                              maxLength={2000}
+                              rows={6}
+                            />
                             <p className="mb-1 font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
                               Suggested category changes
                             </p>
