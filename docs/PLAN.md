@@ -274,11 +274,11 @@ Join/create → name + emoji → stage with one mock scenario.
 **Goal:** On the session-complete screen, reveal every hidden role and show each team’s score as **team + bonus**.
 
 **Stories:**
-- As anyone, when the session completes I see Red and Blue scored as `team + bonus` (category sum + met role bonuses)
-- As anyone, every player’s hidden role is revealed with whether its condition was met against the final city totals (+1 or 0)
+- As anyone, when the session completes I see a **team scoreboard** (`team + bonus`) and below it a **player scoreboard** ranked by each player’s total
+- As anyone, every player’s hidden role is revealed with whether its condition was met against the final city totals
 - As a developer, `secrets/{uid}` becomes readable to the whole room only when `phase == "complete"`
 
-**Done when:** After the last round is applied, a non-judge device sees both team scores and every role without a permission error.
+**Done when:** After the last round is applied, a non-judge device sees both scoreboards and every role without a permission error.
 
 ### Slice B — Polish (next)
 

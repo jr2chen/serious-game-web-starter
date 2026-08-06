@@ -1516,11 +1516,12 @@ export default function CommonsApp() {
                   Final scores &amp; role reveal
                 </h2>
                 <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
-                  Team score is that team&apos;s two city categories. Bonus is
-                  +1 per hidden role on the team whose condition was met.
-                  Shown as team + bonus.
+                  Teams score as category total + sum of met role bonuses.
+                  Players below are ranked by their personal total (team
+                  points + their own role bonus).
                 </p>
 
+                <p className="label-mono mb-2 text-clay-deep">Teams</p>
                 {(["red", "blue"] as const).map((t) => {
                   const teamScore = teamCategoryScore(categories, t);
                   const members = roster.filter((p) => p.team === t);
@@ -1563,7 +1564,7 @@ export default function CommonsApp() {
                       <p className="text-[11px] text-ink-soft">
                         {TEAMS[t].goalLabel}
                         {rolesReady
-                          ? ` · ${members.length} role${members.length === 1 ? "" : "s"}`
+                          ? ` · total ${teamScore + bonus}`
                           : " · revealing roles…"}
                       </p>
                     </div>
@@ -1571,21 +1572,22 @@ export default function CommonsApp() {
                 })}
 
                 <p className="label-mono mt-5 mb-2 text-clay-deep">
-                  Hidden roles revealed
+                  Players
                 </p>
-                <div className="flex flex-col gap-2">
-                  {roster.filter((p) => p.team !== "judge").length === 0 && (
+                <div className="mb-4 flex flex-col gap-2">
+                  {roster.filter((p) => isTeamId(p.team)).length === 0 && (
                     <p className="text-[13.5px] leading-[1.5] text-ink-soft">
-                      No players to reveal.
+                      No players to rank.
                     </p>
                   )}
-                  {roster
+                  {[...roster]
                     .filter((p): p is typeof p & { team: TeamId } =>
                       isTeamId(p.team),
                     )
                     .map((p) => {
                       const role = rolesByPlayerId[p.id];
                       const known = p.id in rolesByPlayerId;
+                      const teamScore = teamCategoryScore(categories, p.team);
                       const met =
                         role != null &&
                         roleConditionMet(
@@ -1593,6 +1595,26 @@ export default function CommonsApp() {
                           role.comparison,
                           role.threshold,
                         );
+                      const bonus = met ? 1 : 0;
+                      return {
+                        player: p,
+                        role,
+                        known,
+                        teamScore,
+                        bonus,
+                        met,
+                        total: known ? teamScore + bonus : -Infinity,
+                      };
+                    })
+                    .sort((a, b) => {
+                      if (b.total !== a.total) return b.total - a.total;
+                      return a.player.displayName.localeCompare(
+                        b.player.displayName,
+                      );
+                    })
+                    .map((row, index) => {
+                      const { player: p, role, known, teamScore, bonus, met } =
+                        row;
                       const categoryName =
                         role != null
                           ? (CATEGORIES.find((c) => c.id === role.target_category)
@@ -1603,30 +1625,45 @@ export default function CommonsApp() {
                         <div key={p.id} className="card p-3">
                           <div className="mb-1 flex items-center justify-between gap-2">
                             <span className="text-[13.5px] font-semibold">
+                              <span className="mr-1.5 font-mono text-[11px] text-ink-soft">
+                                #{index + 1}
+                              </span>
                               <span aria-hidden>{p.emoji}</span> {p.displayName}
                             </span>
-                            <span
-                              className={`font-mono text-[10px] ${
-                                p.team === "red" ? "text-rust" : "text-team-blue"
-                              }`}
-                            >
-                              {TEAMS[p.team].name}
+                            <span className="font-display text-[22px] font-semibold tabular-nums">
+                              {known ? (
+                                teamScore + bonus
+                              ) : (
+                                <span className="text-[13px] font-sans font-normal text-ink-soft">
+                                  …
+                                </span>
+                              )}
                             </span>
                           </div>
+                          <p
+                            className={`mb-2 font-mono text-[10px] ${
+                              p.team === "red" ? "text-rust" : "text-team-blue"
+                            }`}
+                          >
+                            {TEAMS[p.team].name}
+                            {known
+                              ? ` · ${teamScore} + ${bonus}`
+                              : " · revealing…"}
+                          </p>
                           {!known ? (
                             <p className="text-[12.5px] text-ink-soft">
-                              Revealing…
+                              Revealing role…
                             </p>
                           ) : role == null ? (
                             <p className="text-[12.5px] text-ink-soft">
-                              No role on file.
+                              No role on file
                             </p>
                           ) : (
                             <>
                               <p className="mb-1 text-[13px] font-semibold text-ink">
                                 {role.role_name}
                               </p>
-                              <p className="mb-2 text-[12px] leading-[1.45] text-ink-soft">
+                              <p className="mb-1 text-[12px] leading-[1.45] text-ink-soft">
                                 {roleRuleLabel(
                                   categoryName,
                                   role.comparison,
@@ -1641,7 +1678,7 @@ export default function CommonsApp() {
                                   met ? "text-forest" : "text-ink-soft"
                                 }`}
                               >
-                                {met ? "✓ Met · bonus +1" : "✗ Not met · bonus 0"}
+                                {met ? "✓ Role met · bonus +1" : "✗ Role missed · bonus 0"}
                               </p>
                             </>
                           )}

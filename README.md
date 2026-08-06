@@ -42,8 +42,8 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 - On the vote screen, tap **Apply winner & next round →** once there’s a clear majority — that proposal’s numbers are added to the shared city totals, votes clear, and everyone lands on the next scenario (Round 2 is already in the CSV). If that was the last round, the room shows the **session complete** screen
 
 **Session complete** — after the last round is applied:
-- Each team’s score is shown as **team + bonus** (e.g. `4 + 2`): team = that team’s two city categories; bonus = +1 for each of that team’s hidden roles whose condition was met against the final totals
-- Every player’s hidden role is revealed (name, rule, met / not met)
+- A **team scoreboard** on top — each team as **team + bonus** (category total + sum of that team’s met role bonuses)
+- A **player scoreboard** below, ranked by each player’s **total** (team points + their own role bonus), with the role reveal under each row
 
 The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
 
