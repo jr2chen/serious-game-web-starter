@@ -80,16 +80,16 @@ export function teamCategoryScore(
 }
 
 export type PlayerScoreBreakdown = {
-  /** Base from scoring.csv player_base (categories total or policy win). */
+  /** Base from scoring.csv player_base (capped team points or policy win). */
   base: number;
-  /** Role points from roles.csv when the condition is met; else 0. */
+  /** Role bonus — fixed CSV points when met, or raw category total (corruption). */
   roleBonus: number;
   roleMet: boolean;
   total: number;
 };
 
 /**
- * Personal scoreboard math — style flips via scoring.csv `player_base`.
+ * Personal scoreboard math — style flips via scoring.csv.
  * Team scoreboard always uses teamCategoryScore alone (no role points).
  */
 export function playerScoreBreakdown(input: {
@@ -106,8 +106,16 @@ export function playerScoreBreakdown(input: {
       input.role.comparison,
       input.role.threshold,
     );
-  const roleBonus =
-    roleMet && input.role != null ? input.role.points : 0;
+
+  let roleBonus = 0;
+  if (input.role != null) {
+    if (input.scoring.role_bonus === "category") {
+      // Corruption: signed final total for their target category, always.
+      roleBonus = input.categoryTotals[input.role.target_category];
+    } else if (roleMet) {
+      roleBonus = input.role.points;
+    }
+  }
 
   let base = 0;
   if (input.scoring.player_base === "categories") {

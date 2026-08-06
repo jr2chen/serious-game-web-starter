@@ -1555,8 +1555,12 @@ export default function CommonsApp() {
                   Team score is +1 per goal category above 0 (max 2). Player
                   totals use <span className="font-mono">scoring.csv</span> (
                   {scoringConfig?.player_base === "policy"
-                    ? "policy win + role points"
-                    : "team points + role points"}
+                    ? "policy win"
+                    : "team points"}
+                  {" + "}
+                  {scoringConfig?.role_bonus === "category"
+                    ? "city value in their role’s area"
+                    : "role points"}
                   ).
                 </p>
 
@@ -1660,7 +1664,9 @@ export default function CommonsApp() {
                             >
                               {TEAMS[p.team].name}
                               {known
-                                ? ` · ${score.base} + ${score.roleBonus}`
+                                ? ` · ${score.base} ${
+                                    score.roleBonus >= 0 ? "+" : "−"
+                                  } ${Math.abs(score.roleBonus)}`
                                 : " · revealing…"}
                             </p>
                             {!known ? (
@@ -1690,14 +1696,22 @@ export default function CommonsApp() {
                                 </p>
                                 <p
                                   className={`font-mono text-[11px] ${
-                                    score.roleMet
-                                      ? "text-forest"
-                                      : "text-ink-soft"
+                                    scoringConfig.role_bonus === "category"
+                                      ? score.roleBonus !== 0
+                                        ? "text-forest"
+                                        : "text-ink-soft"
+                                      : score.roleMet
+                                        ? "text-forest"
+                                        : "text-ink-soft"
                                   }`}
                                 >
-                                  {score.roleMet
-                                    ? `✓ Role met · +${role.points}`
-                                    : `✗ Role missed · +0`}
+                                  {scoringConfig.role_bonus === "category"
+                                    ? `Role area · ${
+                                        score.roleBonus > 0 ? "+" : ""
+                                      }${score.roleBonus}`
+                                    : score.roleMet
+                                      ? `✓ Role met · +${role.points}`
+                                      : `✗ Role missed · +0`}
                                 </p>
                               </>
                             )}

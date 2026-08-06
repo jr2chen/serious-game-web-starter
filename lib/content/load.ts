@@ -6,6 +6,7 @@ import type {
   CategoryId,
   HiddenRole,
   PlayerBaseScoring,
+  RoleBonusScoring,
   Scenario,
   ScoringConfig,
   StarterProposal,
@@ -115,18 +116,28 @@ export async function loadRoles(): Promise<HiddenRole[]> {
   });
 }
 
-/** Workshop scoring knobs — flip player_base to switch game styles. */
+/** Workshop scoring knobs — flip columns to switch game styles. */
 export async function loadScoringConfig(): Promise<ScoringConfig> {
   const rows = await readCsv("scoring.csv");
   const row = rows[0];
   if (!row) {
     throw new Error("scoring.csv has no rows");
   }
-  requireFields(row, ["player_base", "policy_win_points"], "scoring.csv row 2");
+  requireFields(
+    row,
+    ["player_base", "policy_win_points", "role_bonus"],
+    "scoring.csv row 2",
+  );
   const player_base = row.player_base as PlayerBaseScoring;
   if (player_base !== "categories" && player_base !== "policy") {
     throw new Error(
       'scoring.csv: player_base must be "categories" or "policy"',
+    );
+  }
+  const role_bonus = row.role_bonus as RoleBonusScoring;
+  if (role_bonus !== "fixed" && role_bonus !== "category") {
+    throw new Error(
+      'scoring.csv: role_bonus must be "fixed" or "category"',
     );
   }
   const policy_win_points = Number(row.policy_win_points);
@@ -139,7 +150,7 @@ export async function loadScoringConfig(): Promise<ScoringConfig> {
       "scoring.csv: policy_win_points must be a whole number ≥ 0",
     );
   }
-  return { player_base, policy_win_points };
+  return { player_base, policy_win_points, role_bonus };
 }
 
 export async function loadStarterProposals(): Promise<StarterProposal[]> {

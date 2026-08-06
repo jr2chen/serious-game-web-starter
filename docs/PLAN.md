@@ -291,6 +291,16 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** Changing `player_base` to `policy` and refreshing makes the player board use last-adopted-team points instead of category totals.
 
+### Slice B2 — Corruption role bonus (done)
+
+**Goal:** Role half of player score can use the signed final city value of the role’s target category.
+
+**Stories:**
+- As an editor, `scoring.csv` `role_bonus` is `fixed` or `category`
+- As a player in corruption mode (`role_bonus=category`), my role points equal that area’s final total (+ or −), not a flat CSV bonus
+
+**Done when:** With `policy,1,category`, a Housing Advocate whose housing ends at +6 gets +6 role points on the board (even if negative for other roles).
+
 ### Slice C — Polish (next)
 
 Empty/loading polish for the reveal.

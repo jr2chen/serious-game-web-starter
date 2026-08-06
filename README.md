@@ -41,7 +41,7 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 **Session complete** — after the last round is applied:
 - A **team scoreboard** on top — **0–2 points**: +1 for each of that team’s two goal categories that ends above 0 (no role bonuses)
 - A **player scoreboard** below, ranked by each player’s **total** (`base + role`), with the role reveal under each row
-- **Base** comes from [`content/scoring.csv`](content/scoring.csv): `categories` (that capped team score) or `policy` (points if their team’s proposal was last adopted). **Role** points come from each role’s `points` column in [`content/roles.csv`](content/roles.csv) when the condition is met
+- **Base** comes from [`content/scoring.csv`](content/scoring.csv): `categories` (that capped team score) or `policy` (points if their team’s proposal was last adopted). **Role** bonus is also spreadsheet-driven: `fixed` uses each role’s `points` when the condition is met, or `category` (corruption style) adds the final city value of that role’s target area — positive or negative
 
 The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
 
@@ -144,14 +144,21 @@ One row = how **player** totals are built on the final scoreboard (team totals a
 | --- | --- | --- |
 | `player_base` | What counts as the player’s base before role points | `categories` or `policy` |
 | `policy_win_points` | Points for being on the last-adopted team when `player_base` is `policy` | whole number ≥ 0 |
+| `role_bonus` | How the role half of the player total is computed | `fixed` or `category` |
 
-**Styles:**
-- `categories` (default sample) — player total = capped team points (0–2) + role points  
-- `policy` — player total = `policy_win_points` if their team was last adopted, else `0`, then + role points  
+**Base styles (`player_base`):**
+- `categories` (default sample) — capped team points (0–2)
+- `policy` — `policy_win_points` if their team was last adopted, else `0`
 
-**Team points (always, on the team scoreboard and as `categories` base):** for that team’s two goal categories, score **+1 per category that ends above 0** — so 0, 1, or 2 max. Raw city totals are not summed.
+**Role styles (`role_bonus`):**
+- `fixed` (default sample) — add `roles.csv` `points` when the role condition is met, else `0`
+- `category` — **corruption mode**: always add the final city total for that role’s target category (can be + or −). Players are rewarded for how that area ended, not a flat bonus
 
-To flip styles: edit `player_base` in this file, save, refresh, and start a new stage load (rejoin / re-enter).
+**Corruption workshop recipe:** set `player_base` to `policy`, `policy_win_points` to `1`, and `role_bonus` to `category`.
+
+**Team points (always, on the team scoreboard and as `categories` base):** for that team’s two goal categories, score **+1 per category that ends above 0** — so 0, 1, or 2 max. Raw city totals are not summed for the team board.
+
+To flip styles: edit this file, save, refresh, and start a new stage load (rejoin / re-enter).
 
 ---
 

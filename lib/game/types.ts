@@ -39,16 +39,24 @@ export type HiddenRole = {
 
 /**
  * How a player's "base" score is computed on the final scoreboard.
- * - categories: team city-category total (Jobs+Housing or Accessibility+Climate)
+ * - categories: capped team points (0–2 from goal categories above 0)
  * - policy: points if that player's team was the last adopted proposal
- * Role points from roles.csv always add on top when the role is met.
  */
 export type PlayerBaseScoring = "categories" | "policy";
+
+/**
+ * How role bonus is computed on the player scoreboard.
+ * - fixed: roles.csv `points` when the role condition is met (else 0)
+ * - category: final city total for the role's target category (can be + or −)
+ *   — the "corruption" style: reward how that area ended, not a flat bonus
+ */
+export type RoleBonusScoring = "fixed" | "category";
 
 export type ScoringConfig = {
   player_base: PlayerBaseScoring;
   /** Points for a policy win when player_base is "policy" (from scoring.csv). */
   policy_win_points: number;
+  role_bonus: RoleBonusScoring;
 };
 
 export type CategoryTotals = Record<CategoryId, number>;
