@@ -1,5 +1,8 @@
 export type TeamId = "red" | "blue";
 
+/** A player's seat in a room: a visible team, or a neutral judge. */
+export type SeatRole = TeamId | "judge";
+
 export type CategoryId =
   | "jobs"
   | "housing"
@@ -80,13 +83,15 @@ export type Room = {
   createdAtMs: number;
   createdBy: string;
   playerCount: number;
+  /** Shared discussion countdown target (epoch ms); unset until stage starts. */
+  timerEndsAtMs?: number;
 };
 
 export type RoomPlayer = {
   id: string;
   displayName: string;
   emoji: string;
-  team: TeamId;
+  team: SeatRole;
   joinedAtMs: number;
 };
 

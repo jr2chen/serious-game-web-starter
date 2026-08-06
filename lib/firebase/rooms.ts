@@ -4,13 +4,17 @@ import {
   doc,
   getCountFromServer,
   getDoc,
+  increment,
+  onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
   getDocs,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { ensureAnonymousUser } from "@/lib/firebase/auth";
 import { getFirebaseDb } from "@/lib/firebase/client";
@@ -50,6 +54,8 @@ function roomFromDoc(
     typeof data.playerCount === "number" ? data.playerCount : 0;
   const createdBy =
     typeof data.createdBy === "string" ? data.createdBy : "unknown";
+  const timerEndsAtMs =
+    typeof data.timerEndsAtMs === "number" ? data.timerEndsAtMs : undefined;
 
   return {
     id,
@@ -61,6 +67,7 @@ function roomFromDoc(
     createdAtMs,
     createdBy,
     playerCount,
+    timerEndsAtMs,
   };
 }
 
@@ -141,4 +148,56 @@ export async function syncRoomPlayerCount(roomCode: string): Promise<number> {
   const playerCount = countSnap.data().count;
   await updateDoc(doc(db, ROOMS, roomCode), { playerCount });
   return playerCount;
+}
+
+/** Live room doc — used to keep the discussion timer in sync for everyone. */
+export async function subscribeToRoom(
+  roomCode: string,
+  onChange: (room: Room | null) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  return onSnapshot(
+    doc(db, ROOMS, roomCode),
+    (snap) => {
+      onChange(snap.exists() ? roomFromDoc(snap.id, snap.data()) : null);
+    },
+    (error) => onError?.(error),
+  );
+}
+
+/**
+ * Starts the shared discussion countdown the first time anyone reaches the
+ * stage, so every device (including the judge) ends up watching the same
+ * clock. A no-op if the timer is already running — returns the existing end
+ * time instead of resetting it.
+ */
+export async function ensureRoomTimer(
+  roomCode: string,
+  durationSeconds: number,
+): Promise<number> {
+  await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  const ref = doc(db, ROOMS, roomCode);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const existing = snap.data()?.timerEndsAtMs;
+    if (typeof existing === "number" && existing > 0) return existing;
+    const timerEndsAtMs = Date.now() + durationSeconds * 1000;
+    tx.update(ref, { timerEndsAtMs });
+    return timerEndsAtMs;
+  });
+}
+
+/** Judge control — atomically pushes the shared countdown back by N seconds. */
+export async function addRoomTime(
+  roomCode: string,
+  extraSeconds: number,
+): Promise<void> {
+  await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  await updateDoc(doc(db, ROOMS, roomCode), {
+    timerEndsAtMs: increment(extraSeconds * 1000),
+  });
 }

@@ -1,9 +1,14 @@
-import type { ComparisonOp } from "@/lib/game/types";
+import type { ComparisonOp, SeatRole, TeamId } from "@/lib/game/types";
 
 export const COMPARISON_OPS: ComparisonOp[] = [">", ">=", "<", "<=", "="];
 
 export function isComparisonOp(value: string): value is ComparisonOp {
   return (COMPARISON_OPS as string[]).includes(value);
+}
+
+/** Narrows a seat role to a scoring team (excludes the neutral judge seat). */
+export function isTeamId(seat: SeatRole): seat is TeamId {
+  return seat === "red" || seat === "blue";
 }
 
 export function formatThreshold(value: number): string {

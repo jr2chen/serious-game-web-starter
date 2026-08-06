@@ -6,14 +6,18 @@ import {
   assignHiddenRole,
   createRoom,
   enterRoom,
+  extendRoomTimer,
   getCategoryTotals,
   getRoom,
   getScenario,
   getStarterProposal,
   listRooms,
   loadMySeat,
+  loadRoleForPlayer,
   saveTeamProposal,
   seedTeamProposal,
+  startRoomTimer,
+  watchRoom,
   watchRoomPlayers,
   watchTeamProposal,
 } from "@/lib/api/client";
@@ -25,8 +29,10 @@ import type {
   Room,
   RoomPlayer,
   Scenario,
+  SeatRole,
   StarterProposal,
   TeamId,
+  TeamProposalDraft,
   ThemeId,
 } from "@/lib/game/types";
 import {
@@ -35,7 +41,7 @@ import {
   PROPOSAL_DELTA_LIMIT,
   TEAMS,
 } from "@/lib/game/constants";
-import { roleRuleLabel } from "@/lib/game/scoring";
+import { isTeamId, roleRuleLabel } from "@/lib/game/scoring";
 import {
   clearActiveRoom,
   readActiveRoomCode,
@@ -147,7 +153,7 @@ export default function CommonsApp() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
-  const [team, setTeam] = useState<TeamId | null>(null);
+  const [team, setTeam] = useState<SeatRole | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [starter, setStarter] = useState<StarterProposal | null>(null);
   const [draftText, setDraftText] = useState("");
@@ -156,7 +162,10 @@ export default function CommonsApp() {
   const [draftUpdatedBy, setDraftUpdatedBy] = useState<string | null>(null);
   const [draftUpdatedAtMs, setDraftUpdatedAtMs] = useState<number | null>(null);
   const [submittingProposal, setSubmittingProposal] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  /** Shared countdown target from the room doc; null until the round starts. */
+  const [timerEndsAtMs, setTimerEndsAtMs] = useState<number | null>(null);
+  /** Ticks once a second on stage so the synced countdown re-renders. */
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -166,6 +175,14 @@ export default function CommonsApp() {
   const [scoreInfoOpen, setScoreInfoOpen] = useState(false);
   const [rejoinCode, setRejoinCode] = useState<string | null>(null);
   const [rejoining, setRejoining] = useState(false);
+  /** Judge-only: both teams' live drafts, read-only. */
+  const [teamProposals, setTeamProposals] = useState<
+    Record<TeamId, TeamProposalDraft | null>
+  >({ red: null, blue: null });
+  /** Judge-only: hidden role per roster player, fetched on demand. */
+  const [rolesByPlayerId, setRolesByPlayerId] = useState<
+    Record<string, HiddenRole | null>
+  >({});
   /** Current page URL for the main-screen QR (preview / prod / localhost). */
   const [pageUrl, setPageUrl] = useState("");
 
@@ -256,7 +273,9 @@ export default function CommonsApp() {
 
   /** Live team proposal — remote Submit overwrites local text + deltas. */
   useEffect(() => {
-    if (screen !== "stage" || !selectedRoom || !team) return;
+    if (screen !== "stage" || !selectedRoom || !team || team === "judge") {
+      return;
+    }
 
     let active = true;
     let unsub: (() => void) | undefined;
@@ -294,12 +313,103 @@ export default function CommonsApp() {
     };
   }, [screen, selectedRoom, team]);
 
-  /** Mock countdown only — not synced across players or persisted. */
+  /** Judge-only: watch both teams' drafts, read-only. */
+  useEffect(() => {
+    if (screen !== "stage" || !selectedRoom || team !== "judge") return;
+
+    let active = true;
+    const unsubs: Array<() => void> = [];
+
+    for (const t of ["red", "blue"] as const) {
+      void watchTeamProposal(
+        selectedRoom.code,
+        t,
+        (draft) => {
+          if (active) setTeamProposals((prev) => ({ ...prev, [t]: draft }));
+        },
+        (error) => {
+          if (active) setLoadError(error.message);
+        },
+      ).then((unsubscribe) => {
+        if (!active) {
+          unsubscribe();
+          return;
+        }
+        unsubs.push(unsubscribe);
+      });
+    }
+
+    return () => {
+      active = false;
+      unsubs.forEach((unsub) => unsub());
+    };
+  }, [screen, selectedRoom, team]);
+
+  /** Judge-only: fetch each roster player's hidden role on demand. */
+  useEffect(() => {
+    if (screen !== "stage" || !selectedRoom || team !== "judge") return;
+    const missing = roster.filter(
+      (p) => p.team !== "judge" && !(p.id in rolesByPlayerId),
+    );
+    if (missing.length === 0) return;
+
+    let active = true;
+    void Promise.all(
+      missing.map(async (p) => {
+        const role = await loadRoleForPlayer(selectedRoom.code, p.id).catch(
+          () => null,
+        );
+        return [p.id, role] as const;
+      }),
+    ).then((entries) => {
+      if (!active) return;
+      setRolesByPlayerId((prev) => {
+        const next = { ...prev };
+        for (const [id, role] of entries) next[id] = role;
+        return next;
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [screen, selectedRoom, team, roster, rolesByPlayerId]);
+
+  /** Live room doc — keeps the shared discussion timer in sync for everyone. */
+  useEffect(() => {
+    if (screen !== "stage" || !selectedRoom) return;
+
+    let active = true;
+    let unsub: (() => void) | undefined;
+
+    void watchRoom(
+      selectedRoom.code,
+      (room) => {
+        if (active && room?.timerEndsAtMs) {
+          setTimerEndsAtMs(room.timerEndsAtMs);
+        }
+      },
+      (error) => {
+        if (active) setLoadError(error.message);
+      },
+    ).then((unsubscribe) => {
+      if (!active) {
+        unsubscribe();
+        return;
+      }
+      unsub = unsubscribe;
+    });
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [screen, selectedRoom]);
+
+  /** Ticks once a second so the synced countdown below re-renders. */
   useEffect(() => {
     if (screen !== "stage") return;
-    const interval = setInterval(() => {
-      setSecondsLeft((prev) => (prev === null || prev <= 0 ? prev : prev - 1));
-    }, 1000);
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [screen]);
 
@@ -321,7 +431,7 @@ export default function CommonsApp() {
     setDraftUpdatedBy(null);
     setDraftUpdatedAtMs(null);
     setSubmittingProposal(false);
-    setSecondsLeft(null);
+    setTimerEndsAtMs(null);
     setHiddenRole(null);
     setCategories(null);
     setLoadError(null);
@@ -329,6 +439,8 @@ export default function CommonsApp() {
     setRosterOpen(false);
     setRoleOpen(false);
     setScoreInfoOpen(false);
+    setTeamProposals({ red: null, blue: null });
+    setRolesByPlayerId({});
     void refreshRooms();
   }
 
@@ -376,12 +488,18 @@ export default function CommonsApp() {
 
     try {
       setLoadError(null);
-      const [nextScenario, role, totals] = await Promise.all([
+      const [nextScenario, totals] = await Promise.all([
         getScenario(selectedRoom.id),
-        assignHiddenRole(team),
         getCategoryTotals(),
       ]);
-      const proposal = await getStarterProposal(nextScenario.scenario_id, team);
+
+      let role: HiddenRole | null = null;
+      let proposal: StarterProposal | null = null;
+      if (team !== "judge") {
+        role = await assignHiddenRole(team);
+        proposal = await getStarterProposal(nextScenario.scenario_id, team);
+      }
+
       await enterRoom({
         roomCode: selectedRoom.code,
         displayName,
@@ -389,29 +507,37 @@ export default function CommonsApp() {
         team,
         role,
       });
-      const seeded = await seedTeamProposal({
-        roomCode: selectedRoom.code,
-        starter: proposal,
-        displayName,
-      });
+
+      if (proposal) {
+        const seeded = await seedTeamProposal({
+          roomCode: selectedRoom.code,
+          starter: proposal,
+          displayName,
+        });
+        setDraftText(seeded.proposal_text);
+        setDraftDeltas({
+          jobs: seeded.jobs,
+          housing: seeded.housing,
+          accessibility: seeded.accessibility,
+          climate: seeded.climate,
+          cost: seeded.cost,
+        });
+        setDraftUpdatedBy(seeded.updatedByName || null);
+        setDraftUpdatedAtMs(seeded.updatedAtMs);
+      }
+
+      const endsAtMs = await startRoomTimer(
+        selectedRoom.code,
+        nextScenario.discussion_seconds,
+      );
 
       setName(displayName);
       setEmoji(mark);
       setScenario(nextScenario);
       setStarter(proposal);
-      setDraftText(seeded.proposal_text);
-      setDraftDeltas({
-        jobs: seeded.jobs,
-        housing: seeded.housing,
-        accessibility: seeded.accessibility,
-        climate: seeded.climate,
-        cost: seeded.cost,
-      });
-      setDraftUpdatedBy(seeded.updatedByName || null);
-      setDraftUpdatedAtMs(seeded.updatedAtMs);
       setHiddenRole(role);
       setCategories(totals);
-      setSecondsLeft(nextScenario.discussion_seconds);
+      setTimerEndsAtMs(endsAtMs);
       rememberActiveRoom(selectedRoom.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -441,15 +567,34 @@ export default function CommonsApp() {
         getScenario(room.id),
         getCategoryTotals(),
       ]);
-      const proposal = await getStarterProposal(
-        nextScenario.scenario_id,
-        seat.player.team,
+
+      let proposal: StarterProposal | null = null;
+      if (seat.player.team !== "judge") {
+        proposal = await getStarterProposal(
+          nextScenario.scenario_id,
+          seat.player.team,
+        );
+        const seeded = await seedTeamProposal({
+          roomCode: room.code,
+          starter: proposal,
+          displayName: seat.player.displayName,
+        });
+        setDraftText(seeded.proposal_text);
+        setDraftDeltas({
+          jobs: seeded.jobs,
+          housing: seeded.housing,
+          accessibility: seeded.accessibility,
+          climate: seeded.climate,
+          cost: seeded.cost,
+        });
+        setDraftUpdatedBy(seeded.updatedByName || null);
+        setDraftUpdatedAtMs(seeded.updatedAtMs);
+      }
+
+      const endsAtMs = await startRoomTimer(
+        room.code,
+        nextScenario.discussion_seconds,
       );
-      const seeded = await seedTeamProposal({
-        roomCode: room.code,
-        starter: proposal,
-        displayName: seat.player.displayName,
-      });
 
       setSelectedRoom(room);
       setName(seat.player.displayName);
@@ -457,19 +602,9 @@ export default function CommonsApp() {
       setTeam(seat.player.team);
       setScenario(nextScenario);
       setStarter(proposal);
-      setDraftText(seeded.proposal_text);
-      setDraftDeltas({
-        jobs: seeded.jobs,
-        housing: seeded.housing,
-        accessibility: seeded.accessibility,
-        climate: seeded.climate,
-        cost: seeded.cost,
-      });
-      setDraftUpdatedBy(seeded.updatedByName || null);
-      setDraftUpdatedAtMs(seeded.updatedAtMs);
       setHiddenRole(seat.role);
       setCategories(totals);
-      setSecondsLeft(nextScenario.discussion_seconds);
+      setTimerEndsAtMs(endsAtMs);
       rememberActiveRoom(room.code);
       setRejoinCode(null);
       setScreen("stage");
@@ -482,8 +617,20 @@ export default function CommonsApp() {
     }
   }
 
+  /** Judge-only control — pushes the shared countdown back by one minute. */
+  async function addMinuteToTimer() {
+    if (!selectedRoom) return;
+    try {
+      await extendRoomTimer(selectedRoom.code, 60);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not add time",
+      );
+    }
+  }
+
   async function submitProposalRevision() {
-    if (!selectedRoom || !team || !scenario) return;
+    if (!selectedRoom || !team || team === "judge" || !scenario) return;
     setSubmittingProposal(true);
     setLoadError(null);
     try {
@@ -511,9 +658,16 @@ export default function CommonsApp() {
     }));
   }
 
-  const teamInfo = team ? TEAMS[team] : null;
+  const teamInfo = team && isTeamId(team) ? TEAMS[team] : null;
   const redCount = roster.filter((p) => p.team === "red").length;
   const blueCount = roster.filter((p) => p.team === "blue").length;
+  const judgeCount = roster.filter((p) => p.team === "judge").length;
+  const isJudge = team === "judge";
+  /** Synced countdown when running, else the scenario's default duration. */
+  const secondsLeft =
+    timerEndsAtMs != null
+      ? Math.max(0, Math.round((timerEndsAtMs - nowTick) / 1000))
+      : scenario?.discussion_seconds ?? 0;
 
   return (
     <div className="relative w-[420px] overflow-visible rounded-[20px] border border-line bg-paper shadow-[0_1px_0_rgba(0,0,0,0.03)] max-[480px]:min-h-dvh max-[480px]:w-full max-[480px]:rounded-none max-[480px]:border-none">
@@ -755,8 +909,9 @@ export default function CommonsApp() {
               Who&apos;s joining?
             </h2>
             <p className="mb-7 text-[13.5px] text-ink-soft">
-              Pick a name, a mark, and a visible team. Your hidden role is
-              assigned privately when you enter.
+              Pick a name, a mark, and a seat. Red and Blue get a private
+              hidden role; Judges see both proposals and everyone&apos;s role
+              instead.
             </p>
 
             <label className={FIELD_LABEL} htmlFor="name-input">
@@ -772,7 +927,7 @@ export default function CommonsApp() {
               onChange={(e) => setName(e.target.value)}
             />
 
-            <label className={FIELD_LABEL}>Visible team</label>
+            <label className={FIELD_LABEL}>Seat</label>
             <div className="mb-7 flex flex-col gap-[10px]">
               {(["red", "blue"] as const).map((id) => (
                 <button
@@ -795,6 +950,21 @@ export default function CommonsApp() {
                   </span>
                 </button>
               ))}
+              <button
+                type="button"
+                className={`${OPT_CARD}${
+                  team === "judge"
+                    ? " border-clay-deep bg-[var(--tint-clay-soft)]"
+                    : ""
+                }`}
+                onClick={() => setTeam("judge")}
+              >
+                <span className="text-[14.5px] font-semibold">Judge</span>
+                <span className="text-[12.5px] text-ink-soft">
+                  Neutral — see both proposals, every hidden role, and add
+                  time to the round
+                </span>
+              </button>
             </div>
 
             <label className={FIELD_LABEL}>Pick a mark</label>
@@ -829,12 +999,7 @@ export default function CommonsApp() {
         </div>
       )}
 
-      {screen === "stage" &&
-        scenario &&
-        teamInfo &&
-        hiddenRole &&
-        categories &&
-        starter && (
+      {screen === "stage" && scenario && team && categories && (
           <div className="relative flex h-[min(860px,calc(100dvh-64px))] max-h-[min(860px,calc(100dvh-64px))] flex-col max-[480px]:h-dvh max-[480px]:max-h-dvh">
             <div className="flex shrink-0 flex-col gap-[10px] border-b border-line px-4 py-3">
               <div className="flex items-center gap-2">
@@ -846,31 +1011,42 @@ export default function CommonsApp() {
                     {name || "Player"}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  className={`inline-flex max-w-[220px] cursor-pointer items-center gap-[6px] rounded-[20px] border border-dashed py-[5px] pr-2 pl-[10px] font-sans text-inherit shadow-[0_0_0_2px_var(--tint-clay-ring)] transition-[border-color,box-shadow,transform] duration-150 hover:border-solid hover:shadow-[0_0_0_3px_var(--tint-clay-ring-strong)] active:scale-[0.98] ${
-                    teamInfo.id === "red"
-                      ? "bg-team-red-soft border-team-red-line"
-                      : "bg-team-blue-soft border-team-blue-line"
-                  } ${roleOpen ? "border-solid" : ""}`}
-                  onClick={() => setRoleOpen((open) => !open)}
-                  aria-expanded={roleOpen}
-                  aria-controls="role-panel"
-                >
-                  <span className="min-w-0 truncate text-[11.5px] font-semibold">
-                    {teamInfo.id === "red" ? "Red" : "Blue"} ·{" "}
-                    {hiddenRole.role_name}
-                  </span>
-                  <span
-                    className="shrink-0 rounded-full bg-[var(--tint-card-bright)] px-[6px] py-[2px] font-mono text-[9px] tracking-[0.06em] text-clay-deep uppercase"
-                    aria-hidden
+                {isJudge || !teamInfo || !hiddenRole ? (
+                  <div className="inline-flex max-w-[220px] items-center gap-[6px] rounded-[20px] border border-dashed border-clay-deep bg-[var(--tint-clay-soft)] py-[5px] pr-3 pl-[10px]">
+                    <span className="min-w-0 truncate text-[11.5px] font-semibold">
+                      Judge · neutral
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`inline-flex max-w-[220px] cursor-pointer items-center gap-[6px] rounded-[20px] border border-dashed py-[5px] pr-2 pl-[10px] font-sans text-inherit shadow-[0_0_0_2px_var(--tint-clay-ring)] transition-[border-color,box-shadow,transform] duration-150 hover:border-solid hover:shadow-[0_0_0_3px_var(--tint-clay-ring-strong)] active:scale-[0.98] ${
+                      teamInfo.id === "red"
+                        ? "bg-team-red-soft border-team-red-line"
+                        : "bg-team-blue-soft border-team-blue-line"
+                    } ${roleOpen ? "border-solid" : ""}`}
+                    onClick={() => setRoleOpen((open) => !open)}
+                    aria-expanded={roleOpen}
+                    aria-controls="role-panel"
                   >
-                    {roleOpen ? "Hide" : "Role"}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-ink-soft" aria-hidden>
-                    {roleOpen ? "▴" : "▾"}
-                  </span>
-                </button>
+                    <span className="min-w-0 truncate text-[11.5px] font-semibold">
+                      {teamInfo.id === "red" ? "Red" : "Blue"} ·{" "}
+                      {hiddenRole.role_name}
+                    </span>
+                    <span
+                      className="shrink-0 rounded-full bg-[var(--tint-card-bright)] px-[6px] py-[2px] font-mono text-[9px] tracking-[0.06em] text-clay-deep uppercase"
+                      aria-hidden
+                    >
+                      {roleOpen ? "Hide" : "Role"}
+                    </span>
+                    <span
+                      className="shrink-0 text-[10px] text-ink-soft"
+                      aria-hidden
+                    >
+                      {roleOpen ? "▴" : "▾"}
+                    </span>
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -916,12 +1092,20 @@ export default function CommonsApp() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div
                   className="chip"
-                  aria-label={`Discussion timer ${formatTimer(secondsLeft ?? scenario.discussion_seconds)}`}
+                  aria-label={`Discussion timer ${formatTimer(secondsLeft)}`}
                 >
                   <span aria-hidden>⏱</span>
-                  <span>
-                    {formatTimer(secondsLeft ?? scenario.discussion_seconds)}
-                  </span>
+                  <span>{formatTimer(secondsLeft)}</span>
+                  {isJudge && (
+                    <button
+                      type="button"
+                      className="ml-[2px] shrink-0 cursor-pointer rounded-full border border-clay-deep bg-[var(--tint-clay-soft)] px-[6px] py-[1px] font-mono text-[10px] font-semibold text-clay-deep transition-colors hover:bg-[var(--tint-clay-hover)]"
+                      onClick={() => void addMinuteToTimer()}
+                      aria-label="Add one minute to the discussion timer"
+                    >
+                      +1m
+                    </button>
+                  )}
                 </div>
                 <div className="chip">
                   <span aria-hidden>#</span>
@@ -942,7 +1126,7 @@ export default function CommonsApp() {
               </div>
             </div>
 
-            {roleOpen && (
+            {roleOpen && teamInfo && hiddenRole && (
               <button
                 type="button"
                 className="block w-full shrink-0 cursor-pointer border-0 border-b border-dashed border-clay-deep bg-card px-6 pt-[14px] pb-4 text-left font-sans text-inherit transition-colors duration-150 hover:bg-[var(--tint-clay-hover)]"
@@ -1000,81 +1184,190 @@ export default function CommonsApp() {
                 </p>
               </div>
 
-              <p className="label-mono mb-2">Your team&apos;s proposal</p>
-              <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
-                Shared with your team only. Prefer{" "}
-                <strong>one person revising at a time</strong> — Submit
-                overwrites the text and all five numbers for everyone (last
-                write wins).
-              </p>
-              <div className="card mb-2 p-4">
-                <label className={FIELD_LABEL} htmlFor="proposal-text">
-                  Proposal text
-                </label>
-                <textarea
-                  id="proposal-text"
-                  className="mb-4 min-h-[280px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
-                  value={draftText}
-                  onChange={(e) => setDraftText(e.target.value)}
-                  maxLength={2000}
-                  rows={10}
-                />
+              {isJudge ? (
+                <>
+                  <p className="label-mono mb-2 text-clay-deep">
+                    Both team proposals
+                  </p>
+                  <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
+                    Read-only — you watch both drafts update live but can’t
+                    edit them.
+                  </p>
+                  {(["red", "blue"] as const).map((t) => {
+                    const draft = teamProposals[t];
+                    return (
+                      <div key={t} className="card mb-4 p-4">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span
+                            className={`text-[13px] font-semibold ${
+                              t === "red" ? "text-rust" : "text-team-blue"
+                            }`}
+                          >
+                            {TEAMS[t].name}
+                          </span>
+                          {draft?.updatedByName && (
+                            <span className="text-[11px] text-ink-soft">
+                              Last by {draft.updatedByName}
+                            </span>
+                          )}
+                        </div>
+                        {draft ? (
+                          <>
+                            <p className="mb-3 whitespace-pre-wrap text-sm leading-[1.55] text-ink">
+                              {draft.proposal_text || "(no text yet)"}
+                            </p>
+                            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                              {DELTA_KEYS.map((key) => (
+                                <span key={key} className="chip">
+                                  <span className="text-ink-soft">
+                                    {SCORE_ABBR[key]}
+                                  </span>
+                                  <span>{formatDelta(draft[key])}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-[13px] text-ink-soft">
+                            Waiting for this team to start their draft…
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
 
-                <p className={FIELD_LABEL}>Suggested category changes</p>
-                <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto pb-1">
-                  {DELTA_KEYS.map((key) => (
-                    <div
-                      key={key}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-deep px-2 py-1.5"
-                    >
-                      <span className="font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
-                        {SCORE_ABBR[key]}
-                      </span>
+                  <p className="label-mono mt-6 mb-2 text-clay-deep">
+                    Hidden roles
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {roster.filter((p) => p.team !== "judge").length ===
+                      0 && (
+                      <p className="text-[13.5px] leading-[1.5] text-ink-soft">
+                        No players yet.
+                      </p>
+                    )}
+                    {roster
+                      .filter((p) => p.team !== "judge")
+                      .map((p) => {
+                        const known = p.id in rolesByPlayerId;
+                        const role = rolesByPlayerId[p.id];
+                        return (
+                          <div
+                            key={p.id}
+                            className={`card flex items-center gap-[10px] border-l-[3px] px-3 py-[10px] ${
+                              p.team === "red"
+                                ? "border-l-rust"
+                                : "border-l-team-blue"
+                            }`}
+                          >
+                            <span className="text-lg leading-none">
+                              {p.emoji}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                              {p.displayName}
+                            </span>
+                            <span className="text-right text-[12px] text-ink-soft">
+                              {!known
+                                ? "Loading…"
+                                : role
+                                  ? role.role_name
+                                  : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  {loadError && screen === "stage" && (
+                    <p className={`${LOAD_ERROR} mt-4`}>{loadError}</p>
+                  )}
+                </>
+              ) : (
+                teamInfo &&
+                starter && (
+                  <>
+                    <p className="label-mono mb-2">
+                      Your team&apos;s proposal
+                    </p>
+                    <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
+                      Shared with your team only. Prefer{" "}
+                      <strong>one person revising at a time</strong> — Submit
+                      overwrites the text and all five numbers for everyone
+                      (last write wins).
+                    </p>
+                    <div className="card mb-2 p-4">
+                      <label className={FIELD_LABEL} htmlFor="proposal-text">
+                        Proposal text
+                      </label>
+                      <textarea
+                        id="proposal-text"
+                        className="mb-4 min-h-[280px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
+                        value={draftText}
+                        onChange={(e) => setDraftText(e.target.value)}
+                        maxLength={2000}
+                        rows={10}
+                      />
+
+                      <p className={FIELD_LABEL}>Suggested category changes</p>
+                      <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto pb-1">
+                        {DELTA_KEYS.map((key) => (
+                          <div
+                            key={key}
+                            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper-deep px-2 py-1.5"
+                          >
+                            <span className="font-mono text-[9px] tracking-[0.04em] text-ink-soft uppercase">
+                              {SCORE_ABBR[key]}
+                            </span>
+                            <button
+                              type="button"
+                              className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                              aria-label={`Decrease ${key}`}
+                              onClick={() => nudgeDelta(key, -1)}
+                            >
+                              −
+                            </button>
+                            <span className="w-5 text-center font-display text-sm font-semibold">
+                              {formatDelta(draftDeltas[key])}
+                            </span>
+                            <button
+                              type="button"
+                              className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
+                              aria-label={`Increase ${key}`}
+                              onClick={() => nudgeDelta(key, 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {draftUpdatedBy && (
+                        <p className="mb-3 text-[12px] text-ink-soft">
+                          Last revision by <strong>{draftUpdatedBy}</strong>
+                          {draftUpdatedAtMs
+                            ? ` · ${new Date(draftUpdatedAtMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                            : ""}
+                        </p>
+                      )}
+
+                      {loadError && screen === "stage" && (
+                        <p className={LOAD_ERROR}>{loadError}</p>
+                      )}
+
                       <button
                         type="button"
-                        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
-                        aria-label={`Decrease ${key}`}
-                        onClick={() => nudgeDelta(key, -1)}
+                        className="btn btn-primary"
+                        disabled={submittingProposal || !draftText.trim()}
+                        onClick={() => void submitProposalRevision()}
                       >
-                        −
-                      </button>
-                      <span className="w-5 text-center font-display text-sm font-semibold">
-                        {formatDelta(draftDeltas[key])}
-                      </span>
-                      <button
-                        type="button"
-                        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded border border-line bg-card text-xs font-semibold text-ink hover:border-clay-deep"
-                        aria-label={`Increase ${key}`}
-                        onClick={() => nudgeDelta(key, 1)}
-                      >
-                        +
+                        {submittingProposal
+                          ? "Submitting…"
+                          : "Submit revision"}
                       </button>
                     </div>
-                  ))}
-                </div>
-
-                {draftUpdatedBy && (
-                  <p className="mb-3 text-[12px] text-ink-soft">
-                    Last revision by <strong>{draftUpdatedBy}</strong>
-                    {draftUpdatedAtMs
-                      ? ` · ${new Date(draftUpdatedAtMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                      : ""}
-                  </p>
-                )}
-
-                {loadError && screen === "stage" && (
-                  <p className={LOAD_ERROR}>{loadError}</p>
-                )}
-
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={submittingProposal || !draftText.trim()}
-                  onClick={() => void submitProposalRevision()}
-                >
-                  {submittingProposal ? "Submitting…" : "Submit revision"}
-                </button>
-              </div>
+                  </>
+                )
+              )}
             </div>
 
             <div className="shrink-0 border-t border-line bg-paper px-6 pt-3 pb-4">
@@ -1119,6 +1412,14 @@ export default function CommonsApp() {
                     <span className="text-rust">{redCount} Red</span>
                     {" · "}
                     <span className="text-team-blue">{blueCount} Blue</span>
+                    {judgeCount > 0 && (
+                      <>
+                        {" · "}
+                        <span className="text-clay-deep">
+                          {judgeCount} Judge{judgeCount === 1 ? "" : "s"}
+                        </span>
+                      </>
+                    )}
                   </p>
                   <div className="flex flex-col gap-2">
                     {roster.length === 0 && (
@@ -1132,7 +1433,9 @@ export default function CommonsApp() {
                         className={`flex items-center gap-[10px] rounded-[10px] border-t border-r border-b border-l-[3px] border-t-line border-r-line border-b-line bg-card px-3 py-[10px] ${
                           player.team === "red"
                             ? "border-l-rust"
-                            : "border-l-team-blue"
+                            : player.team === "blue"
+                              ? "border-l-team-blue"
+                              : "border-l-clay-deep"
                         }`}
                       >
                         <span className="text-lg leading-none">
@@ -1142,7 +1445,9 @@ export default function CommonsApp() {
                           {player.displayName}
                         </span>
                         <span className="font-mono text-[11px] text-ink-soft">
-                          {TEAMS[player.team].name}
+                          {player.team === "judge"
+                            ? "Judge"
+                            : TEAMS[player.team].name}
                         </span>
                       </div>
                     ))}

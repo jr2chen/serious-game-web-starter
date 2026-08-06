@@ -13,13 +13,19 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid)).data.team;
     }
 
+    // Judges are neutral facilitators — they can see both proposals and
+    // every hidden role, but never write proposals or secrets themselves.
+    function isJudgeInRoom(roomId) {
+      return signedIn() && myTeamInRoom(roomId) == 'judge';
+    }
+
     function isTeammateProposal(roomId, teamId) {
       return signedIn()
         && (teamId == 'red' || teamId == 'blue')
         && myTeamInRoom(roomId) == teamId;
     }
 
-    // Public room metadata (lobby list, theme, counts).
+    // Public room metadata (lobby list, theme, counts, shared timer).
     match /rooms/{roomId} {
       allow read, write: if signedIn();
     }
@@ -31,14 +37,17 @@ service cloud.firestore {
       allow delete: if isSelf(playerId);
     }
 
-    // Private hidden role — only that player can read/write.
+    // Private hidden role — that player, or a judge in the same room, can read.
     match /rooms/{roomId}/secrets/{playerId} {
-      allow read, write: if isSelf(playerId);
+      allow read: if isSelf(playerId) || isJudgeInRoom(roomId);
+      allow write: if isSelf(playerId);
     }
 
-    // Shared team draft — only that team's players (last Submit wins).
+    // Shared team draft — that team's players, or a judge, can read;
+    // only that team's players can write (last Submit wins).
     match /rooms/{roomId}/proposals/{teamId} {
-      allow read, write: if isTeammateProposal(roomId, teamId);
+      allow read: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
+      allow write: if isTeammateProposal(roomId, teamId);
     }
 
     match /{document=**} {

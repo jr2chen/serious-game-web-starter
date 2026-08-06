@@ -5,6 +5,7 @@ import type {
   Room,
   RoomPlayer,
   Scenario,
+  SeatRole,
   StarterProposal,
   TeamId,
   TeamProposalDraft,
@@ -12,12 +13,16 @@ import type {
 } from "@/lib/game/types";
 import { INITIAL_CATEGORY_TOTALS } from "@/lib/game/constants";
 import {
+  addRoomTime,
   createRoom as createFirestoreRoom,
+  ensureRoomTimer,
   getRoom as getFirestoreRoom,
   listRecentRooms,
+  subscribeToRoom,
 } from "@/lib/firebase/rooms";
 import {
   getMySeatInRoom,
+  getRoleForPlayer,
   joinRoomAsPlayer,
   subscribeToRoomPlayers,
   type PlayerSeat,
@@ -56,8 +61,8 @@ export async function enterRoom(input: {
   roomCode: string;
   displayName: string;
   emoji: string;
-  team: TeamId;
-  role: HiddenRole;
+  team: SeatRole;
+  role: HiddenRole | null;
 }): Promise<void> {
   await joinRoomAsPlayer(input);
 }
@@ -68,12 +73,44 @@ export async function loadMySeat(
   return getMySeatInRoom(roomCode);
 }
 
+export async function loadRoleForPlayer(
+  roomCode: string,
+  playerId: string,
+): Promise<HiddenRole | null> {
+  return getRoleForPlayer(roomCode, playerId);
+}
+
 export async function watchRoomPlayers(
   roomCode: string,
   onChange: (players: RoomPlayer[]) => void,
   onError?: (error: Error) => void,
 ): Promise<Unsubscribe> {
   return subscribeToRoomPlayers(roomCode, onChange, onError);
+}
+
+/** Live room doc — used to keep the shared discussion timer in sync. */
+export async function watchRoom(
+  roomCode: string,
+  onChange: (room: Room | null) => void,
+  onError?: (error: Error) => void,
+): Promise<Unsubscribe> {
+  return subscribeToRoom(roomCode, onChange, onError);
+}
+
+/** Starts the shared countdown if it isn't running yet; returns its end time. */
+export async function startRoomTimer(
+  roomCode: string,
+  durationSeconds: number,
+): Promise<number> {
+  return ensureRoomTimer(roomCode, durationSeconds);
+}
+
+/** Judge-only control — pushes the shared countdown back by N seconds. */
+export async function extendRoomTimer(
+  roomCode: string,
+  extraSeconds: number,
+): Promise<void> {
+  return addRoomTime(roomCode, extraSeconds);
 }
 
 export async function seedTeamProposal(input: {

@@ -199,7 +199,7 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ---
 
-## Epic 4 — Team proposal drafting (current)
+## Epic 4 — Team proposal drafting (done)
 
 **Goal:** Each team shares one editable draft; Submit overwrites for everyone on that team.
 
@@ -218,7 +218,25 @@ Join/create → name + emoji → stage with one mock scenario.
 
 ## Epic 5 — Reveal, present, judge
 
-Show both proposals; facilitator timing; facilitator enters final −2…+2 per category (optional judges advise; facilitator finalizes).
+### Slice A — Judge seat (current)
+
+**Goal:** A third, neutral seat that can see everything and run the clock; still no scoring UI.
+
+**Stories:**
+- As a player, at entry I can pick **Judge** instead of Red or Blue
+- As a judge, I have no hidden role and no team proposal of my own
+- As a judge, I can read **both** teams’ live proposal drafts, read-only
+- As a judge, I can read every seated player’s hidden role
+- As a judge, I can **add a minute** to the shared discussion timer
+- As any player, the discussion timer is now the **same clock** on every device in the room (not a private per-tab mock)
+
+**Keep simple:** Any number of judges per room (including zero). Judges can't edit proposals or write secrets. No facilitator-applies-final-deltas UI yet — that's the next Epic 5 slice.
+
+**Done when:** A judge device sees both drafts + every role update live, and tapping +1m visibly extends the countdown on a second, non-judge device.
+
+### Slice B — Facilitator finalizes deltas (next)
+
+Facilitator/judge enters the final −2…+2 per category for the round; totals update.
 
 ---
 
@@ -242,10 +260,11 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 4. Epic 3b — create/join + last-hour room list (done)
 5. Epic 3c — live roster + private role secrets (done)
 6. Epic 3d — rejoin button after refresh (done)
-7. **Epic 4** — editable private team proposals (this slice)
-8. Epic 5 — reveal + facilitator apply deltas
-9. Epic 6 — derived scores + next/end
-10. Epic 7 — polish
+7. Epic 4 — editable private team proposals (done)
+8. **Epic 5a** — judge seat: both proposals, all roles, shared timer (this slice)
+9. Epic 5b — facilitator applies final deltas
+10. Epic 6 — derived scores + next/end
+11. Epic 7 — polish
 
 ---
 

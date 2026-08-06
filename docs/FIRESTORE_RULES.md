@@ -13,15 +13,15 @@ Tick items off as you go (`[ ]` → `[x]`).
 
 | Path | Who can access |
 | --- | --- |
-| `rooms/{code}` | Any signed-in user (read/write) — lobby metadata |
+| `rooms/{code}` | Any signed-in user (read/write) — lobby metadata + shared timer |
 | `rooms/{code}/players/{uid}` | Everyone signed-in can **read**; only that uid can **write** |
-| `rooms/{code}/secrets/{uid}` | **Only that uid** can read/write (hidden role) |
-| `rooms/{code}/proposals/{team}` | Only players whose roster `team` matches (`red` / `blue`) |
+| `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; only that uid can **write** |
+| `rooms/{code}/proposals/{team}` | That team's players (`red` / `blue`), or a `judge`, can **read**; only that team's players can **write** |
 | Everything else | Denied |
 
 Anonymous Auth counts as signed in.
 
-**Important:** Republish rules after this Epic 4 change — the `proposals` path is new. Without it, Submit revision will fail.
+**Important:** Republish rules after this Epic 5 change — judges (a new `team: "judge"` roster value) can now read every `secrets/{uid}` doc and both `proposals/{team}` docs in their room, read-only.
 
 ---
 
@@ -33,7 +33,8 @@ Anonymous Auth counts as signed in.
 - [ ] Refresh the app, create/join a room, confirm the live roster updates
 - [ ] Confirm another device sees your name/team but **not** your hidden role card text from their own role UI only
 - [ ] On stage, edit + **Submit revision** — a teammate’s phone should update the shared draft automatically
-- [ ] Confirm the other team cannot read your proposal doc (opposing draft stays private until Epic 5)
+- [ ] Confirm a red/blue player still cannot read the other team's proposal doc
+- [ ] Join as a `judge` seat — confirm you can read both teams' proposals and every player's hidden role, and can add time to the shared timer
 
 ---
 
@@ -55,6 +56,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid)).data.team;
     }
 
+    function isJudgeInRoom(roomId) {
+      return signedIn() && myTeamInRoom(roomId) == 'judge';
+    }
+
     function isTeammateProposal(roomId, teamId) {
       return signedIn()
         && (teamId == 'red' || teamId == 'blue')
@@ -72,11 +77,13 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId}/secrets/{playerId} {
-      allow read, write: if isSelf(playerId);
+      allow read: if isSelf(playerId) || isJudgeInRoom(roomId);
+      allow write: if isSelf(playerId);
     }
 
     match /rooms/{roomId}/proposals/{teamId} {
-      allow read, write: if isTeammateProposal(roomId, teamId);
+      allow read: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
+      allow write: if isTeammateProposal(roomId, teamId);
     }
 
     match /{document=**} {
@@ -102,11 +109,12 @@ service cloud.firestore {
 ```text
 rooms/{CODE}
   code, themeId, themeName, createdAt, createdBy, playerCount
+  timerEndsAtMs   // shared discussion countdown target (epoch ms); set on stage entry, judges can extend it
 
 rooms/{CODE}/players/{uid}          // public roster
-  displayName, emoji, team, joinedAt
+  displayName, emoji, team, joinedAt   // team is "red" | "blue" | "judge"
 
-rooms/{CODE}/secrets/{uid}          // private role
+rooms/{CODE}/secrets/{uid}          // private role — absent for judge seats
   role_id, role_name, description, target_category, comparison, threshold
 
 rooms/{CODE}/proposals/{red|blue}   // shared team draft (last Submit wins)

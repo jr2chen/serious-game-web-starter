@@ -19,7 +19,7 @@ import type {
   ComparisonOp,
   HiddenRole,
   RoomPlayer,
-  TeamId,
+  SeatRole,
 } from "@/lib/game/types";
 import { isComparisonOp } from "@/lib/game/scoring";
 
@@ -28,8 +28,15 @@ const CATEGORY_IDS = new Set<string>(CATEGORIES.map((c) => c.id));
 
 export type PlayerSeat = {
   player: RoomPlayer;
-  role: HiddenRole;
+  /** Judges have no hidden role. */
+  role: HiddenRole | null;
 };
+
+function seatRoleFromData(value: unknown): SeatRole | null {
+  return value === "red" || value === "blue" || value === "judge"
+    ? value
+    : null;
+}
 
 function playerFromDoc(
   id: string,
@@ -38,7 +45,7 @@ function playerFromDoc(
   const displayName =
     typeof data.displayName === "string" ? data.displayName : null;
   const emoji = typeof data.emoji === "string" ? data.emoji : null;
-  const team = data.team === "red" || data.team === "blue" ? data.team : null;
+  const team = seatRoleFromData(data.team);
   if (!displayName || !emoji || !team) return null;
 
   const joinedAt = data.joinedAt;
@@ -86,20 +93,19 @@ function roleFromDoc(data: Record<string, unknown>): HiddenRole | null {
 }
 
 /**
- * Write public roster fields + private role secret, then sync room.playerCount
- * from the players collection size (no increment).
+ * Write public roster fields + private role secret (skipped for judges,
+ * who have no hidden role), then sync room.playerCount.
  */
 export async function joinRoomAsPlayer(input: {
   roomCode: string;
   displayName: string;
   emoji: string;
-  team: TeamId;
-  role: HiddenRole;
+  team: SeatRole;
+  role: HiddenRole | null;
 }): Promise<void> {
   const user = await ensureAnonymousUser();
   const db = getFirebaseDb();
   const playerRef = doc(db, ROOMS, input.roomCode, "players", user.uid);
-  const secretRef = doc(db, ROOMS, input.roomCode, "secrets", user.uid);
 
   await setDoc(playerRef, {
     displayName: input.displayName,
@@ -108,14 +114,17 @@ export async function joinRoomAsPlayer(input: {
     joinedAt: serverTimestamp(),
   });
 
-  await setDoc(secretRef, {
-    role_id: input.role.role_id,
-    role_name: input.role.role_name,
-    description: input.role.description,
-    target_category: input.role.target_category,
-    comparison: input.role.comparison,
-    threshold: input.role.threshold,
-  });
+  if (input.role) {
+    const secretRef = doc(db, ROOMS, input.roomCode, "secrets", user.uid);
+    await setDoc(secretRef, {
+      role_id: input.role.role_id,
+      role_name: input.role.role_name,
+      description: input.role.description,
+      target_category: input.role.target_category,
+      comparison: input.role.comparison,
+      threshold: input.role.threshold,
+    });
+  }
 
   await syncRoomPlayerCount(input.roomCode);
 }
@@ -129,15 +138,33 @@ export async function getMySeatInRoom(
   const playerSnap = await getDoc(
     doc(db, ROOMS, roomCode, "players", user.uid),
   );
+  if (!playerSnap.exists()) return null;
+  const player = playerFromDoc(playerSnap.id, playerSnap.data());
+  if (!player) return null;
+
+  if (player.team === "judge") {
+    return { player, role: null };
+  }
+
   const secretSnap = await getDoc(
     doc(db, ROOMS, roomCode, "secrets", user.uid),
   );
-  if (!playerSnap.exists() || !secretSnap.exists()) return null;
-
-  const player = playerFromDoc(playerSnap.id, playerSnap.data());
+  if (!secretSnap.exists()) return null;
   const role = roleFromDoc(secretSnap.data());
-  if (!player || !role) return null;
+  if (!role) return null;
   return { player, role };
+}
+
+/** Read one player's hidden role — judges can read any player's role. */
+export async function getRoleForPlayer(
+  roomCode: string,
+  playerId: string,
+): Promise<HiddenRole | null> {
+  await ensureAnonymousUser();
+  const db = getFirebaseDb();
+  const snap = await getDoc(doc(db, ROOMS, roomCode, "secrets", playerId));
+  if (!snap.exists()) return null;
+  return roleFromDoc(snap.data());
 }
 
 /** Live public roster — does not include hidden roles. */
