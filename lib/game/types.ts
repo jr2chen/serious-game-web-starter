@@ -33,6 +33,22 @@ export type HiddenRole = {
   target_category: CategoryId;
   comparison: ComparisonOp;
   threshold: number;
+  /** Points awarded when the role condition is met at end of game. */
+  points: number;
+};
+
+/**
+ * How a player's "base" score is computed on the final scoreboard.
+ * - categories: team city-category total (Jobs+Housing or Accessibility+Climate)
+ * - policy: points if that player's team was the last adopted proposal
+ * Role points from roles.csv always add on top when the role is met.
+ */
+export type PlayerBaseScoring = "categories" | "policy";
+
+export type ScoringConfig = {
+  player_base: PlayerBaseScoring;
+  /** Points for a policy win when player_base is "policy" (from scoring.csv). */
+  policy_win_points: number;
 };
 
 export type CategoryTotals = Record<CategoryId, number>;
@@ -98,6 +114,8 @@ export type Room = {
   roundOrder?: number;
   /** Running city category totals — updated when a vote winner is applied. */
   categoryTotals?: CategoryTotals;
+  /** Last proposal the judge adopted — used by policy-style player scoring. */
+  lastWinnerTeam?: TeamId;
 };
 
 export type RoomPlayer = {

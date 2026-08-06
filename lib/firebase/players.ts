@@ -68,6 +68,10 @@ function roleFromDoc(data: Record<string, unknown>): HiddenRole | null {
     typeof data.target_category === "string" ? data.target_category : null;
   const comparison = data.comparison;
   const threshold = Number(data.threshold);
+  // Older seats may lack points — treat missing as 1 so reveal still works.
+  const pointsRaw = data.points;
+  const points =
+    pointsRaw === undefined || pointsRaw === null ? 1 : Number(pointsRaw);
 
   if (
     !role_id ||
@@ -77,7 +81,10 @@ function roleFromDoc(data: Record<string, unknown>): HiddenRole | null {
     !CATEGORY_IDS.has(target_category) ||
     typeof comparison !== "string" ||
     !isComparisonOp(comparison) ||
-    !Number.isFinite(threshold)
+    !Number.isFinite(threshold) ||
+    !Number.isFinite(points) ||
+    !Number.isInteger(points) ||
+    points < 0
   ) {
     return null;
   }
@@ -89,6 +96,7 @@ function roleFromDoc(data: Record<string, unknown>): HiddenRole | null {
     target_category: target_category as CategoryId,
     comparison: comparison as ComparisonOp,
     threshold,
+    points,
   };
 }
 
@@ -123,6 +131,7 @@ export async function joinRoomAsPlayer(input: {
       target_category: input.role.target_category,
       comparison: input.role.comparison,
       threshold: input.role.threshold,
+      points: input.role.points,
     });
   }
 

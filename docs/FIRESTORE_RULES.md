@@ -150,7 +150,7 @@ rooms/{CODE}/players/{uid}          // public roster
   displayName, emoji, team, joinedAt   // team is "red" | "blue" | "judge"
 
 rooms/{CODE}/secrets/{uid}          // private role — absent for judge seats
-  role_id, role_name, description, target_category, comparison, threshold
+  role_id, role_name, description, target_category, comparison, threshold, points
 
 rooms/{CODE}/proposals/{red|blue}   // shared team draft (last Submit wins)
   team, scenario_id, proposal_text,

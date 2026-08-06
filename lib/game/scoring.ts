@@ -2,6 +2,8 @@ import { TEAMS } from "@/lib/game/constants";
 import type {
   CategoryTotals,
   ComparisonOp,
+  HiddenRole,
+  ScoringConfig,
   SeatRole,
   TeamId,
 } from "@/lib/game/types";
@@ -62,13 +64,65 @@ export function roleConditionMet(
   }
 }
 
-/** Red = Jobs+Housing, Blue = Accessibility+Climate (Cost is neither). */
+/**
+ * Team points from that team's two goal categories (Red = Jobs+Housing,
+ * Blue = Accessibility+Climate). Each category that ends above 0 scores
+ * +1, so the team total is 0, 1, or 2 — never the raw category sum.
+ */
 export function teamCategoryScore(
   totals: CategoryTotals,
   teamId: TeamId,
 ): number {
   return TEAMS[teamId].goalCategories.reduce(
-    (sum, categoryId) => sum + totals[categoryId],
+    (score, categoryId) => score + (totals[categoryId] > 0 ? 1 : 0),
     0,
   );
+}
+
+export type PlayerScoreBreakdown = {
+  /** Base from scoring.csv player_base (categories total or policy win). */
+  base: number;
+  /** Role points from roles.csv when the condition is met; else 0. */
+  roleBonus: number;
+  roleMet: boolean;
+  total: number;
+};
+
+/**
+ * Personal scoreboard math — style flips via scoring.csv `player_base`.
+ * Team scoreboard always uses teamCategoryScore alone (no role points).
+ */
+export function playerScoreBreakdown(input: {
+  scoring: ScoringConfig;
+  teamId: TeamId;
+  categoryTotals: CategoryTotals;
+  lastWinnerTeam: TeamId | null | undefined;
+  role: HiddenRole | null;
+}): PlayerScoreBreakdown {
+  const roleMet =
+    input.role != null &&
+    roleConditionMet(
+      input.categoryTotals[input.role.target_category],
+      input.role.comparison,
+      input.role.threshold,
+    );
+  const roleBonus =
+    roleMet && input.role != null ? input.role.points : 0;
+
+  let base = 0;
+  if (input.scoring.player_base === "categories") {
+    base = teamCategoryScore(input.categoryTotals, input.teamId);
+  } else if (
+    input.lastWinnerTeam != null &&
+    input.teamId === input.lastWinnerTeam
+  ) {
+    base = input.scoring.policy_win_points;
+  }
+
+  return {
+    base,
+    roleBonus,
+    roleMet,
+    total: base + roleBonus,
+  };
 }
