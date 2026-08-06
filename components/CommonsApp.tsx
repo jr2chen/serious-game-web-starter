@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "react-qr-code";
 import {
+  advanceRoomAfterVote,
   assignHiddenRole,
   castProposalVote,
   createRoom,
   enterRoom,
   extendRoomTimer,
-  getCategoryTotals,
+  getNextScenario,
   getRoom,
   getScenario,
   getStarterProposal,
@@ -16,8 +17,8 @@ import {
   loadMySeat,
   loadMyUid,
   loadRoleForPlayer,
-  reviseTeamProposal,
   saveTeamProposal,
+  seedRoomRound,
   seedTeamProposal,
   startRoomTimer,
   startVoting,
@@ -33,6 +34,7 @@ import type {
   HiddenRole,
   ProposalVote,
   Room,
+  RoomPhase,
   RoomPlayer,
   Scenario,
   SeatRole,
@@ -47,7 +49,12 @@ import {
   PROPOSAL_DELTA_LIMIT,
   TEAMS,
 } from "@/lib/game/constants";
-import { isTeamId, roleRuleLabel } from "@/lib/game/scoring";
+import {
+  isTeamId,
+  roleConditionMet,
+  roleRuleLabel,
+  teamCategoryScore,
+} from "@/lib/game/scoring";
 import {
   clearActiveRoom,
   readActiveRoomCode,
@@ -104,6 +111,25 @@ function formatTimer(seconds: number): string {
   const mins = Math.floor(clamped / 60);
   const secs = clamped % 60;
   return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+/**
+ * Firestore re-checks proposal listeners when room.phase leaves "vote".
+ * Active watches on the other team's draft are revoked before React can
+ * unsubscribe — that denial is expected, not a real failure.
+ */
+function isPermissionDeniedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code =
+    "code" in error ? String((error as { code: unknown }).code) : "";
+  const message =
+    "message" in error
+      ? String((error as { message: unknown }).message)
+      : "";
+  return (
+    code === "permission-denied" ||
+    /missing or insufficient permissions/i.test(message)
+  );
 }
 
 const SCORE_ABBR: Record<CategoryId, string> = {
@@ -189,16 +215,23 @@ export default function CommonsApp() {
   const [rolesByPlayerId, setRolesByPlayerId] = useState<
     Record<string, HiddenRole | null>
   >({});
-  /** Judge-only: in-progress number edits per team, before Save revision. */
+  /** Judge-only: in-progress text + number edits per team, before Save. */
+  const [judgeDraftText, setJudgeDraftText] = useState<Record<TeamId, string>>({
+    red: "",
+    blue: "",
+  });
   const [judgeDraftDeltas, setJudgeDraftDeltas] = useState<
     Record<TeamId, Record<CategoryId, number>>
   >({ red: EMPTY_DELTAS, blue: EMPTY_DELTAS });
   const [savingJudgeRevision, setSavingJudgeRevision] = useState<
     Record<TeamId, boolean>
   >({ red: false, blue: false });
-  /** "discuss" until a judge moves the whole room to the public vote. */
-  const [stagePhase, setStagePhase] = useState<"discuss" | "vote">("discuss");
+  /** Mirrors rooms/{code}.phase — discuss → vote → (next discuss | complete). */
+  const [stagePhase, setStagePhase] = useState<RoomPhase>("discuss");
   const [startingVote, setStartingVote] = useState(false);
+  const [advancingRound, setAdvancingRound] = useState(false);
+  /** Live scenario id from the room doc — drives reloads when a round advances. */
+  const [roomScenarioId, setRoomScenarioId] = useState<string | null>(null);
   /** Live, public votes for which team's proposal the city should adopt. */
   const [votes, setVotes] = useState<ProposalVote[]>([]);
   const [expandedProposals, setExpandedProposals] = useState<
@@ -320,7 +353,9 @@ export default function CommonsApp() {
         setDraftUpdatedAtMs(draft.updatedAtMs);
       },
       (error) => {
-        if (active) setLoadError(error.message);
+        if (active && !isPermissionDeniedError(error)) {
+          setLoadError(error.message);
+        }
       },
     ).then((unsubscribe) => {
       if (!active) {
@@ -341,10 +376,24 @@ export default function CommonsApp() {
    * else only once the room reaches the vote phase (the reveal) — the
    * Firestore rules deny the read before then, so this stays gated to avoid
    * a spurious permission error on every red/blue device.
+   *
+   * When phase leaves "vote", Firestore revokes the other-team listens
+   * before this effect cleans up — those permission-denied errors are ignored.
    */
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom) return;
-    if (team !== "judge" && stagePhase !== "vote") return;
+    if (team !== "judge" && stagePhase !== "vote") {
+      // Drop the opposing draft from memory once reveal ends.
+      if (team && isTeamId(team)) {
+        setTeamProposals((prev) => ({
+          red: team === "red" ? prev.red : null,
+          blue: team === "blue" ? prev.blue : null,
+        }));
+      } else if (team !== "judge") {
+        setTeamProposals({ red: null, blue: null });
+      }
+      return;
+    }
 
     let active = true;
     const unsubs: Array<() => void> = [];
@@ -357,7 +406,9 @@ export default function CommonsApp() {
           if (active) setTeamProposals((prev) => ({ ...prev, [t]: draft }));
         },
         (error) => {
-          if (active) setLoadError(error.message);
+          if (active && !isPermissionDeniedError(error)) {
+            setLoadError(error.message);
+          }
         },
       ).then((unsubscribe) => {
         if (!active) {
@@ -375,11 +426,20 @@ export default function CommonsApp() {
   }, [screen, selectedRoom, team, stagePhase]);
 
   /**
-   * Judge-only: keep the editable draft numbers in sync with the live
-   * proposal — mirrors how a team's own draftDeltas track their own draft.
+   * Judge-only: keep editable text + numbers in sync with the live
+   * proposals — mirrors how a team's own drafts track Submit.
    */
   useEffect(() => {
     if (team !== "judge") return;
+    setJudgeDraftText((prev) => {
+      const next = { ...prev };
+      for (const t of ["red", "blue"] as const) {
+        const draft = teamProposals[t];
+        if (!draft) continue;
+        next[t] = draft.proposal_text;
+      }
+      return next;
+    });
     setJudgeDraftDeltas((prev) => {
       const next = { ...prev };
       for (const t of ["red", "blue"] as const) {
@@ -397,9 +457,13 @@ export default function CommonsApp() {
     });
   }, [team, teamProposals]);
 
-  /** Judge-only: fetch each roster player's hidden role on demand. */
+  /**
+   * Fetch hidden roles: judges can always read them; everyone else only
+   * once the session is complete (Firestore rules open secrets on complete).
+   */
   useEffect(() => {
-    if (screen !== "stage" || !selectedRoom || team !== "judge") return;
+    if (screen !== "stage" || !selectedRoom) return;
+    if (team !== "judge" && stagePhase !== "complete") return;
     const missing = roster.filter(
       (p) => p.team !== "judge" && !(p.id in rolesByPlayerId),
     );
@@ -425,9 +489,9 @@ export default function CommonsApp() {
     return () => {
       active = false;
     };
-  }, [screen, selectedRoom, team, roster, rolesByPlayerId]);
+  }, [screen, selectedRoom, team, roster, rolesByPlayerId, stagePhase]);
 
-  /** Live room doc — keeps the shared timer and vote phase in sync for everyone. */
+  /** Live room doc — timer, phase, city totals, and current scenario for everyone. */
   useEffect(() => {
     if (screen !== "stage" || !selectedRoom) return;
 
@@ -439,10 +503,27 @@ export default function CommonsApp() {
       (room) => {
         if (!active) return;
         if (room?.timerEndsAtMs) setTimerEndsAtMs(room.timerEndsAtMs);
-        setStagePhase(room?.phase === "vote" ? "vote" : "discuss");
+        const nextPhase: RoomPhase =
+          room?.phase === "vote" || room?.phase === "complete"
+            ? room.phase
+            : "discuss";
+        // Leaving the vote/reveal clears the expected permission blip from
+        // Firestore revoking the other-team proposal listeners.
+        if (nextPhase !== "vote") {
+          setLoadError((err) =>
+            err && /insufficient permissions|permission-denied/i.test(err)
+              ? null
+              : err,
+          );
+        }
+        setStagePhase(nextPhase);
+        if (room?.categoryTotals) setCategories(room.categoryTotals);
+        if (room?.scenarioId) setRoomScenarioId(room.scenarioId);
       },
       (error) => {
-        if (active) setLoadError(error.message);
+        if (active && !isPermissionDeniedError(error)) {
+          setLoadError(error.message);
+        }
       },
     ).then((unsubscribe) => {
       if (!active) {
@@ -457,6 +538,39 @@ export default function CommonsApp() {
       unsub?.();
     };
   }, [screen, selectedRoom]);
+
+  /** When the room advances rounds, reload the scenario (+ starter for players). */
+  useEffect(() => {
+    if (screen !== "stage" || !roomScenarioId) return;
+    if (scenario?.scenario_id === roomScenarioId) return;
+
+    let active = true;
+    void getScenario(roomScenarioId)
+      .then(async (next) => {
+        if (!active) return;
+        setScenario(next);
+        setExpandedProposals({ red: false, blue: false });
+        if (team && isTeamId(team)) {
+          const proposal = await getStarterProposal(next.scenario_id, team);
+          if (active) setStarter(proposal);
+        } else {
+          setStarter(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Could not load next scenario",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [screen, roomScenarioId, scenario?.scenario_id, team]);
 
   /** Live, public vote tally — only relevant once voting has started. */
   useEffect(() => {
@@ -474,7 +588,10 @@ export default function CommonsApp() {
         if (active) setVotes(nextVotes);
       },
       (error) => {
-        if (active) setLoadError(error.message);
+        // Vote docs are deleted when a round advances; ignore the revoke blip.
+        if (active && !isPermissionDeniedError(error)) {
+          setLoadError(error.message);
+        }
       },
     ).then((unsubscribe) => {
       if (!active) {
@@ -525,10 +642,13 @@ export default function CommonsApp() {
     setScoreInfoOpen(false);
     setTeamProposals({ red: null, blue: null });
     setRolesByPlayerId({});
+    setJudgeDraftText({ red: "", blue: "" });
     setJudgeDraftDeltas({ red: EMPTY_DELTAS, blue: EMPTY_DELTAS });
     setSavingJudgeRevision({ red: false, blue: false });
     setStagePhase("discuss");
     setStartingVote(false);
+    setAdvancingRound(false);
+    setRoomScenarioId(null);
     setVotes([]);
     setExpandedProposals({ red: false, blue: false });
     setMyUid(null);
@@ -579,10 +699,15 @@ export default function CommonsApp() {
 
     try {
       setLoadError(null);
-      const [nextScenario, totals] = await Promise.all([
-        getScenario(selectedRoom.id),
-        getCategoryTotals(),
-      ]);
+      const existingRoom = await getRoom(selectedRoom.code);
+      const bootstrap = existingRoom?.scenarioId
+        ? await getScenario(existingRoom.scenarioId)
+        : await getScenario();
+      const round = await seedRoomRound(selectedRoom.code, bootstrap);
+      const nextScenario =
+        round.scenarioId === bootstrap.scenario_id
+          ? bootstrap
+          : await getScenario(round.scenarioId);
 
       let role: HiddenRole | null = null;
       let proposal: StarterProposal | null = null;
@@ -625,9 +750,10 @@ export default function CommonsApp() {
       setName(displayName);
       setEmoji(mark);
       setScenario(nextScenario);
+      setRoomScenarioId(round.scenarioId);
       setStarter(proposal);
       setHiddenRole(role);
-      setCategories(totals);
+      setCategories(round.categoryTotals);
       setTimerEndsAtMs(endsAtMs);
       setMyUid(uid);
       rememberActiveRoom(selectedRoom.code);
@@ -655,10 +781,14 @@ export default function CommonsApp() {
         throw new Error("That room seat is no longer available.");
       }
 
-      const [nextScenario, totals] = await Promise.all([
-        getScenario(room.id),
-        getCategoryTotals(),
-      ]);
+      const bootstrap = room.scenarioId
+        ? await getScenario(room.scenarioId)
+        : await getScenario();
+      const round = await seedRoomRound(room.code, bootstrap);
+      const nextScenario =
+        round.scenarioId === bootstrap.scenario_id
+          ? bootstrap
+          : await getScenario(round.scenarioId);
 
       let proposal: StarterProposal | null = null;
       if (seat.player.team !== "judge") {
@@ -693,9 +823,10 @@ export default function CommonsApp() {
       setEmoji(seat.player.emoji);
       setTeam(seat.player.team);
       setScenario(nextScenario);
+      setRoomScenarioId(round.scenarioId);
       setStarter(proposal);
       setHiddenRole(seat.role);
-      setCategories(totals);
+      setCategories(round.categoryTotals);
       setTimerEndsAtMs(endsAtMs);
       setMyUid(uid);
       rememberActiveRoom(room.code);
@@ -735,6 +866,72 @@ export default function CommonsApp() {
       );
     } finally {
       setStartingVote(false);
+    }
+  }
+
+  /**
+   * Judge-only: adopt the chosen team's current numbers into city totals,
+   * then open the next CSV scenario (or finish if there isn't one).
+   * The public vote tally is advisory — the judge picks.
+   */
+  async function applyWinnerAndAdvance(winningTeam: TeamId) {
+    if (!selectedRoom || !isJudge || !categories || !scenario) return;
+
+    const draft = teamProposals[winningTeam];
+    if (!draft) {
+      setLoadError(`${TEAMS[winningTeam].name} has no proposal draft yet.`);
+      return;
+    }
+
+    const text = judgeDraftText[winningTeam].trim();
+    if (!text) {
+      setLoadError("Proposal text cannot be empty — edit it before adopting.");
+      return;
+    }
+
+    setAdvancingRound(true);
+    setLoadError(null);
+    try {
+      // Persist any unsaved judge edits so the adopted numbers match the UI.
+      await saveTeamProposal({
+        roomCode: selectedRoom.code,
+        team: winningTeam,
+        scenarioId: draft.scenario_id,
+        proposalText: text,
+        deltas: judgeDraftDeltas[winningTeam],
+        displayName: `Judge · ${name.trim() || "Player"}`,
+      });
+
+      const next = await getNextScenario(scenario.round_order);
+      let nextStarters: {
+        red: StarterProposal;
+        blue: StarterProposal;
+      } | null = null;
+      if (next) {
+        const [red, blue] = await Promise.all([
+          getStarterProposal(next.scenario_id, "red"),
+          getStarterProposal(next.scenario_id, "blue"),
+        ]);
+        nextStarters = { red, blue };
+      }
+
+      await advanceRoomAfterVote({
+        roomCode: selectedRoom.code,
+        winningTeam,
+        currentTotals: categories,
+        winningDeltas: judgeDraftDeltas[winningTeam],
+        nextScenario: next,
+        nextStarters,
+        judgeName: name.trim() || "Player",
+      });
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Could not advance to the next round",
+      );
+    } finally {
+      setAdvancingRound(false);
     }
   }
 
@@ -797,17 +994,21 @@ export default function CommonsApp() {
     }));
   }
 
-  /** Judge-only: pushes revised numbers live — that team's text is untouched. */
+  /** Judge-only: pushes revised text + numbers live (full overwrite). */
   async function saveJudgeRevision(t: TeamId) {
     if (!selectedRoom || !isJudge) return;
+    const draft = teamProposals[t];
+    if (!draft) return;
     setSavingJudgeRevision((prev) => ({ ...prev, [t]: true }));
     setLoadError(null);
     try {
-      await reviseTeamProposal({
+      await saveTeamProposal({
         roomCode: selectedRoom.code,
         team: t,
+        scenarioId: draft.scenario_id,
+        proposalText: judgeDraftText[t],
         deltas: judgeDraftDeltas[t],
-        revisedByName: `Judge · ${name.trim() || "Player"}`,
+        displayName: `Judge · ${name.trim() || "Player"}`,
       });
     } catch (error) {
       setLoadError(
@@ -1324,7 +1525,164 @@ export default function CommonsApp() {
             )}
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-[18px] pb-6">
-              {stagePhase === "vote" ? (
+              {stagePhase === "complete" ? (
+              <>
+                <p className="label-mono mb-[10px] text-clay-deep">Session complete</p>
+                <h2 className="mb-2 font-display text-[24px] leading-[1.15] font-semibold">
+                  Final scores &amp; role reveal
+                </h2>
+                <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
+                  Team score is only that team&apos;s city categories (no role
+                  bonuses). Each player&apos;s total is team + their own role
+                  bonus — ranked highest first below.
+                </p>
+
+                <p className="label-mono mb-2 text-clay-deep">Teams</p>
+                {(["red", "blue"] as const).map((t) => {
+                  const teamScore = teamCategoryScore(categories, t);
+
+                  return (
+                    <div key={t} className="card mb-3 p-4">
+                      <div className="mb-1 flex items-baseline justify-between gap-3">
+                        <span
+                          className={`text-[14px] font-semibold ${
+                            t === "red" ? "text-rust" : "text-team-blue"
+                          }`}
+                        >
+                          {TEAMS[t].name}
+                        </span>
+                        <span className="font-display text-[22px] font-semibold tabular-nums">
+                          {teamScore}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-ink-soft">
+                        {TEAMS[t].goalLabel}
+                      </p>
+                    </div>
+                  );
+                })}
+
+                <p className="label-mono mt-5 mb-2 text-clay-deep">
+                  Players
+                </p>
+                <div className="mb-4 flex flex-col gap-2">
+                  {roster.filter((p) => isTeamId(p.team)).length === 0 && (
+                    <p className="text-[13.5px] leading-[1.5] text-ink-soft">
+                      No players to rank.
+                    </p>
+                  )}
+                  {[...roster]
+                    .filter((p): p is typeof p & { team: TeamId } =>
+                      isTeamId(p.team),
+                    )
+                    .map((p) => {
+                      const role = rolesByPlayerId[p.id];
+                      const known = p.id in rolesByPlayerId;
+                      const teamScore = teamCategoryScore(categories, p.team);
+                      const met =
+                        role != null &&
+                        roleConditionMet(
+                          categories[role.target_category],
+                          role.comparison,
+                          role.threshold,
+                        );
+                      const bonus = met ? 1 : 0;
+                      return {
+                        player: p,
+                        role,
+                        known,
+                        teamScore,
+                        bonus,
+                        met,
+                        total: known ? teamScore + bonus : -Infinity,
+                      };
+                    })
+                    .sort((a, b) => {
+                      if (b.total !== a.total) return b.total - a.total;
+                      return a.player.displayName.localeCompare(
+                        b.player.displayName,
+                      );
+                    })
+                    .map((row, index) => {
+                      const { player: p, role, known, teamScore, bonus, met } =
+                        row;
+                      const categoryName =
+                        role != null
+                          ? (CATEGORIES.find((c) => c.id === role.target_category)
+                              ?.name ?? role.target_category)
+                          : "";
+
+                      return (
+                        <div key={p.id} className="card p-3">
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="text-[13.5px] font-semibold">
+                              <span className="mr-1.5 font-mono text-[11px] text-ink-soft">
+                                #{index + 1}
+                              </span>
+                              <span aria-hidden>{p.emoji}</span> {p.displayName}
+                            </span>
+                            <span className="font-display text-[22px] font-semibold tabular-nums">
+                              {known ? (
+                                teamScore + bonus
+                              ) : (
+                                <span className="text-[13px] font-sans font-normal text-ink-soft">
+                                  …
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <p
+                            className={`mb-2 font-mono text-[10px] ${
+                              p.team === "red" ? "text-rust" : "text-team-blue"
+                            }`}
+                          >
+                            {TEAMS[p.team].name}
+                            {known
+                              ? ` · ${teamScore} + ${bonus}`
+                              : " · revealing…"}
+                          </p>
+                          {!known ? (
+                            <p className="text-[12.5px] text-ink-soft">
+                              Revealing role…
+                            </p>
+                          ) : role == null ? (
+                            <p className="text-[12.5px] text-ink-soft">
+                              No role on file
+                            </p>
+                          ) : (
+                            <>
+                              <p className="mb-1 text-[13px] font-semibold text-ink">
+                                {role.role_name}
+                              </p>
+                              <p className="mb-1 text-[12px] leading-[1.45] text-ink-soft">
+                                {roleRuleLabel(
+                                  categoryName,
+                                  role.comparison,
+                                  role.threshold,
+                                )}{" "}
+                                · final {categoryName}{" "}
+                                {categories[role.target_category] > 0 ? "+" : ""}
+                                {categories[role.target_category]}
+                              </p>
+                              <p
+                                className={`font-mono text-[11px] ${
+                                  met ? "text-forest" : "text-ink-soft"
+                                }`}
+                              >
+                                {met ? "✓ Role met · bonus +1" : "✗ Role missed · bonus 0"}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {loadError && screen === "stage" && (
+                  <p className={LOAD_ERROR}>{loadError}</p>
+                )}
+              </>
+              ) : stagePhase === "vote" ? (
               <>
                 <p className="label-mono mb-[10px] text-clay-deep">Voting</p>
                 <h2 className="mb-2 font-display text-[24px] leading-[1.15] font-semibold">
@@ -1333,7 +1691,7 @@ export default function CommonsApp() {
                 <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
                   Votes are public — tap a proposal to read it in full.{" "}
                   {isJudge
-                    ? "Judges don't vote."
+                    ? "Judges don't vote — edit either proposal, then adopt one below."
                     : "Tap a team name to cast or change your vote."}
                 </p>
 
@@ -1381,64 +1739,29 @@ export default function CommonsApp() {
                       </button>
 
                       <div className="px-4 pb-4">
-                        <p
-                          className={`mb-3 text-[13px] leading-[1.5] text-ink ${
-                            expanded ? "whitespace-pre-wrap" : "truncate"
-                          }`}
-                        >
-                          {draft?.proposal_text ||
-                            "Waiting for this team's draft…"}
-                        </p>
-
-                        <p className="label-mono mb-1">
-                          If adopted, revised totals
-                        </p>
-                        <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1">
-                          {categories &&
-                            CATEGORIES.map((cat) => {
-                              const base = categories[cat.id];
-                              const value = base + (draft ? draft[cat.id] : 0);
-                              return (
-                                <span key={cat.id} className="chip">
-                                  <span className="text-ink-soft">
-                                    {SCORE_ABBR[cat.id]}
-                                  </span>
-                                  <span
-                                    className={
-                                      value > base
-                                        ? "text-forest"
-                                        : value < base
-                                          ? "text-rust"
-                                          : ""
-                                    }
-                                  >
-                                    {value > 0 ? "+" : ""}
-                                    {value}
-                                  </span>
-                                </span>
-                              );
-                            })}
-                        </div>
-
-                        {expanded && !isJudge && (
-                          <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
-                            {DELTA_KEYS.map((key) => (
-                              <span key={key} className="chip">
-                                <span className="text-ink-soft">
-                                  {SCORE_ABBR[key]}
-                                </span>
-                                <span>
-                                  {formatDelta(draft ? draft[key] : 0)}
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {expanded && isJudge && draft && (
+                        {isJudge && draft ? (
                           <>
+                            <label
+                              className="mb-1 block font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase"
+                              htmlFor={`judge-vote-text-${t}`}
+                            >
+                              Proposal text
+                            </label>
+                            <textarea
+                              id={`judge-vote-text-${t}`}
+                              className="mb-3 min-h-[120px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
+                              value={judgeDraftText[t]}
+                              onChange={(e) =>
+                                setJudgeDraftText((prev) => ({
+                                  ...prev,
+                                  [t]: e.target.value,
+                                }))
+                              }
+                              maxLength={2000}
+                              rows={5}
+                            />
                             <p className="mb-1 font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
-                              Revise suggested changes
+                              Suggested category changes
                             </p>
                             <div className="no-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
                               {DELTA_KEYS.map((key) => (
@@ -1482,6 +1805,65 @@ export default function CommonsApp() {
                                 : "Save revision"}
                             </button>
                           </>
+                        ) : (
+                          <p
+                            className={`mb-3 text-[13px] leading-[1.5] text-ink ${
+                              expanded ? "whitespace-pre-wrap" : "truncate"
+                            }`}
+                          >
+                            {draft?.proposal_text ||
+                              "Waiting for this team's draft…"}
+                          </p>
+                        )}
+
+                        <p className="label-mono mb-1">
+                          If adopted, revised totals
+                        </p>
+                        <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1">
+                          {categories &&
+                            CATEGORIES.map((cat) => {
+                              const base = categories[cat.id];
+                              const delta = isJudge
+                                ? judgeDraftDeltas[t][cat.id]
+                                : draft
+                                  ? draft[cat.id]
+                                  : 0;
+                              const value = base + delta;
+                              return (
+                                <span key={cat.id} className="chip">
+                                  <span className="text-ink-soft">
+                                    {SCORE_ABBR[cat.id]}
+                                  </span>
+                                  <span
+                                    className={
+                                      value > base
+                                        ? "text-forest"
+                                        : value < base
+                                          ? "text-rust"
+                                          : ""
+                                    }
+                                  >
+                                    {value > 0 ? "+" : ""}
+                                    {value}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                        </div>
+
+                        {expanded && !isJudge && (
+                          <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
+                            {DELTA_KEYS.map((key) => (
+                              <span key={key} className="chip">
+                                <span className="text-ink-soft">
+                                  {SCORE_ABBR[key]}
+                                </span>
+                                <span>
+                                  {formatDelta(draft ? draft[key] : 0)}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
                         )}
 
                         {votesForTeam.length > 0 && (
@@ -1516,6 +1898,46 @@ export default function CommonsApp() {
                     </div>
                   );
                 })}
+
+                {isJudge && (
+                  <div className="card mb-4 border-clay-deep bg-[var(--tint-clay-soft)] p-4">
+                    <p className="mb-1 text-[13.5px] font-semibold text-clay-deep">
+                      Adopt a proposal &amp; continue
+                    </p>
+                    <p className="mb-2 text-[12.5px] leading-[1.45] text-ink-soft">
+                      You pick which proposal&apos;s numbers update the city —
+                      the public tally below is only advisory. Then everyone
+                      moves to the next scenario (or the session ends).
+                    </p>
+                    <p className="mb-3 font-mono text-[11px] text-ink-soft">
+                      Public tally — Red{" "}
+                      {votes.filter((v) => v.choice === "red").length} · Blue{" "}
+                      {votes.filter((v) => v.choice === "blue").length}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={advancingRound || !teamProposals.red}
+                        onClick={() => void applyWinnerAndAdvance("red")}
+                      >
+                        {advancingRound
+                          ? "Advancing…"
+                          : "Adopt Red Team →"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={advancingRound || !teamProposals.blue}
+                        onClick={() => void applyWinnerAndAdvance("blue")}
+                      >
+                        {advancingRound
+                          ? "Advancing…"
+                          : "Adopt Blue Team →"}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {loadError && screen === "stage" && (
                   <p className={LOAD_ERROR}>{loadError}</p>
@@ -1567,9 +1989,8 @@ export default function CommonsApp() {
                     Both team proposals
                   </p>
                   <p className="mb-3 text-[12.5px] leading-[1.45] text-ink-soft">
-                    Their text is theirs to write — but you can revise the
-                    suggested numbers below and Save to push your revision
-                    live.
+                    You can edit either team&apos;s text and suggested numbers,
+                    then Save to push your revision live.
                   </p>
                   {(["red", "blue"] as const).map((t) => {
                     const draft = teamProposals[t];
@@ -1591,9 +2012,25 @@ export default function CommonsApp() {
                         </div>
                         {draft ? (
                           <>
-                            <p className="mb-3 whitespace-pre-wrap text-sm leading-[1.55] text-ink">
-                              {draft.proposal_text || "(no text yet)"}
-                            </p>
+                            <label
+                              className="mb-1 block font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase"
+                              htmlFor={`judge-discuss-text-${t}`}
+                            >
+                              Proposal text
+                            </label>
+                            <textarea
+                              id={`judge-discuss-text-${t}`}
+                              className="mb-3 min-h-[140px] w-full resize-y rounded-[10px] border border-line bg-paper px-3 py-[10px] font-sans text-sm leading-[1.55] text-ink focus:border-clay-deep focus:outline-none"
+                              value={judgeDraftText[t]}
+                              onChange={(e) =>
+                                setJudgeDraftText((prev) => ({
+                                  ...prev,
+                                  [t]: e.target.value,
+                                }))
+                              }
+                              maxLength={2000}
+                              rows={6}
+                            />
                             <p className="mb-1 font-mono text-[10px] tracking-[0.04em] text-ink-soft uppercase">
                               Suggested category changes
                             </p>

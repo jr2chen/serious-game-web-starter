@@ -1,4 +1,4 @@
-# Commons — Epic 5b: judge revisions + colored voter chips
+# Commons — Epic 6a: role reveal + team + bonus
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -16,10 +16,9 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 **Epic 3** — Firebase rooms, roster, rejoin  
 **UI/UX improvements** — UI styles moved to Tailwind; main screen shows a QR for the current URL  
 **Epic 4** — shared editable team proposal (Submit overwrites for teammates)  
-**Epic 5a** — a neutral **Judge** seat that sees both proposals + every hidden role, and a discussion timer that's now the same clock on every device  
-**Epic 5b** — the judge can move the whole room to a **public vote** screen — both proposals reveal, everyone sees the city's totals if each were adopted, and Red/Blue players cast a public vote  
-**This slice** — judges can revise either team's suggested numbers (never their text), and each voter's chip on the vote screen is tinted by their own team color  
-**Next** — Epic 5c (facilitator applies final deltas)
+**Epic 5** — Judge seat, public vote, apply winner & next round / session complete  
+**This slice** — Epic 6a: on the final screen, **reveal every hidden role** and show each team as **team + bonus** (category score + met role bonuses)  
+**Next** — Epic 7 polish
 
 ---
 
@@ -36,25 +35,31 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 **Judge** — a neutral, non-scoring seat:
 - No hidden role, no proposal of your own
 - See **both** teams’ live drafts on stage
-- Nudge either team’s five suggested numbers (±4) and tap **Save revision** — the team’s own wording is never touched, and they see your revision live, same as a teammate’s Submit
+- Edit either team’s proposal **text and numbers** (±4), then **Save revision** — teammates see it live
 - See every seated player’s hidden role (loads on demand as the roster fills in)
 - Tap **+1m** next to the timer to add a minute — every device in the room sees the same countdown, not just your own
 - Tap **Move room to voting →** to move the whole room to the public vote screen
+- On the vote screen, keep editing either proposal; when ready, **Adopt Red** or **Adopt Blue** (public tally is advisory) — that proposal’s numbers update the city, votes clear, and everyone lands on the next scenario (or **session complete** after the last round)
 
-The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room.
+**Session complete** — after the last round is applied:
+- A **team scoreboard** on top — each team’s category total only (Red = Jobs+Housing, Blue = Accessibility+Climate; no role bonuses)
+- A **player scoreboard** below, ranked by each player’s **total** (team points + their own role bonus), with the role reveal under each row
+
+The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
 
 **Voting screen** — once a judge starts it, everyone (Red, Blue, and Judge) sees the same shared screen instead of the discussion/proposal view:
 - Both proposals appear, each **compressed** by default — team name, a one-line vote count, a one-line excerpt of the text, and a compact row of what the city's totals would be **if that proposal were adopted**
 - Tap a proposal to expand it: full text plus the individual category deltas
 - Red and Blue players cast a **public** vote for either proposal — their name and mark appear on the card they picked, tinted **rust for Red voters and blue for Blue voters** so anyone can see at a glance who’s voting what, and can be changed any time
 - Judges watch the tally but don’t vote themselves — expanding a proposal still lets a judge revise its suggested numbers even after voting has started
+- After votes are in, the judge applies the winner and advances (ties and zero votes are blocked)
 
 ---
 
 ## Firebase setup (required)
 
 1. Follow [`docs/FIREBASE.md`](docs/FIREBASE.md)
-2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — this slice lets a judge **write** `proposals/{team}` (to revise numbers) and adds a validated `voterTeam` field on `votes/{uid}`
+2. **Republish rules** from [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.md) — this slice opens `secrets/{uid}` reads to everyone when `phase == "complete"` so the role reveal works on player devices
 3. `cp .env.local.example .env.local` and paste web keys, then `npm run dev`
 
 Without `.env.local`, the main screen shows a configuration error instead of rooms.
@@ -100,7 +105,7 @@ One row = one round.
 | `discussion_seconds` | Suggested discussion length | `240` (= 4 minutes) |
 | `round_order` | Play order (`1`, then `2`, …) | `1` |
 
-Right now the app **always loads round_order 1** on stage. Round 2 is already in the file for later.
+Rooms start on **round_order 1**. After a judge applies a vote winner, the room advances to the next `round_order` row (Round 2 is already in the file).
 
 ---
 
@@ -164,6 +169,7 @@ These **prefill** the team’s shared draft when a room first needs one. Players
 | [`lib/game/themes.ts`](lib/game/themes.ts) | Workshop themes (Municipal only for now) |
 | [`lib/firebase/proposals.ts`](lib/firebase/proposals.ts) | Ensure / submit / live-watch team draft |
 | [`lib/firebase/votes.ts`](lib/firebase/votes.ts) | Cast / live-watch public votes for which proposal to adopt |
+| [`lib/firebase/rounds.ts`](lib/firebase/rounds.ts) | Apply vote winner to city totals + advance (or complete) the round |
 | [`lib/content/`](lib/content/) | CSV parse + load |
 | [`lib/game/`](lib/game/) | Types, constants, scoring helpers |
 | [`lib/api/client.ts`](lib/api/client.ts) | Browser client for content APIs |
@@ -197,18 +203,18 @@ Rooms require a configured `.env.local` plus Anonymous Auth and Firestore enable
 
 ## Explicitly not in this slice
 
-- Facilitator judging or applying final −2…+2 totals (Epic 5c)  
-- A deadline/lock on voting, or an automatic "winner" — the tally is just visible, nothing acts on it yet  
-- Going back from voting to discussion (`phase` only moves forward for now)  
+- A single combined “grand total” beyond the `team + bonus` display  
+- Manual facilitator delta entry separate from the vote winner  
+- A deadline/lock on voting  
+- Going back from voting to discussion without advancing  
 - Live keystroke sync (only **Submit** pushes to teammates)  
 - Proposal locking / turn-taking enforcement  
 - A cap on judges per room, and judges can't cast a vote themselves  
 - Multiple themes  
-- Advancing to Round 2 in the UI  
 - Accounts or saved games across browsers  
 
 ---
 
 ## Suggested next increment
 
-**Epic 5c:** facilitator/judge enters the final −2…+2 per category for the round (perhaps informed by the vote tally) and totals update.
+**Epic 7:** empty/loading/error polish, mobile pass, and a fuller facilitator README.

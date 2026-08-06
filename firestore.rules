@@ -27,9 +27,14 @@ service cloud.firestore {
         && myTeamInRoom(roomId) == teamId;
     }
 
-    // Once a judge moves the room to voting, both proposals become public.
-    function roomPhaseIsVote(roomId) {
-      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'vote';
+    // Once a judge moves the room to voting, both proposals become public
+    // (and stay readable through the session-complete screen).
+    function roomPhaseRevealsProposals(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase in ['vote', 'complete'];
+    }
+
+    function roomPhaseIsComplete(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'complete';
     }
 
     // Only Red/Blue players cast a public vote — judges stay neutral.
@@ -49,9 +54,12 @@ service cloud.firestore {
       allow delete: if isSelf(playerId);
     }
 
-    // Private hidden role — that player, or a judge in the same room, can read.
+    // Private hidden role — that player or a judge can read during play;
+    // everyone can read once the session is complete (the end-game reveal).
     match /rooms/{roomId}/secrets/{playerId} {
-      allow read: if isSelf(playerId) || isJudgeInRoom(roomId);
+      allow read: if isSelf(playerId)
+        || isJudgeInRoom(roomId)
+        || (signedIn() && roomPhaseIsComplete(roomId));
       allow write: if isSelf(playerId);
     }
 
@@ -62,7 +70,7 @@ service cloud.firestore {
     match /rooms/{roomId}/proposals/{teamId} {
       allow read: if isTeammateProposal(roomId, teamId)
         || isJudgeInRoom(roomId)
-        || (signedIn() && roomPhaseIsVote(roomId));
+        || (signedIn() && roomPhaseRevealsProposals(roomId));
       allow write: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
     }
 
@@ -74,7 +82,9 @@ service cloud.firestore {
       allow create, update: if isSelf(playerId)
         && isVotingEligible(roomId)
         && request.resource.data.voterTeam == myTeamInRoom(roomId);
-      allow delete: if isSelf(playerId);
+      // Players clear their own vote; a judge clears the whole tally when
+      // advancing to the next round.
+      allow delete: if isSelf(playerId) || isJudgeInRoom(roomId);
     }
 
     match /{document=**} {

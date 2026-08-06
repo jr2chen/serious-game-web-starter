@@ -13,16 +13,16 @@ Tick items off as you go (`[ ]` → `[x]`).
 
 | Path | Who can access |
 | --- | --- |
-| `rooms/{code}` | Any signed-in user (read/write) — lobby metadata, shared timer, phase |
+| `rooms/{code}` | Any signed-in user (read/write) — lobby metadata, shared timer, phase, scenario, city totals |
 | `rooms/{code}/players/{uid}` | Everyone signed-in can **read**; only that uid can **write** |
-| `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; only that uid can **write** |
-| `rooms/{code}/proposals/{team}` | That team's players and judges can always **read**; once `rooms/{code}.phase == "vote"`, anyone signed in can **read** both; that team's players **or a judge** can **write** (the app only ever lets a judge change the five numbers, never the text) |
-| `rooms/{code}/votes/{uid}` | Any signed-in user can **read**; only seated `red`/`blue` players can **write** their own vote, and only with a `voterTeam` matching their real roster team |
+| `rooms/{code}/secrets/{uid}` | That uid, or a `judge` seated in the room, can **read**; once `phase == "complete"`, anyone signed in can **read** (end-game reveal); only that uid can **write** |
+| `rooms/{code}/proposals/{team}` | That team's players and judges can always **read**; once `phase` is `"vote"` or `"complete"`, anyone signed in can **read** both; that team's players **or a judge** can **write** |
+| `rooms/{code}/votes/{uid}` | Any signed-in user can **read**; only seated `red`/`blue` players can **write** their own vote (with matching `voterTeam`); that player **or a judge** can **delete** (judges clear the tally when advancing rounds) |
 | Everything else | Denied |
 
 Anonymous Auth counts as signed in.
 
-**Important:** Republish rules after this change — judges can now **write** `proposals/{team}` (to revise the suggested numbers), and votes now store/validate a `voterTeam` field.
+**Important:** Republish rules after this change — when `phase == "complete"`, everyone can **read** `secrets/{uid}` for the end-game role reveal.
 
 ---
 
@@ -39,6 +39,8 @@ Anonymous Auth counts as signed in.
 - [ ] As a judge, tap **Move room to voting** — confirm a red/blue device now sees both proposals and can cast a public vote; confirm the judge device cannot cast a vote
 - [ ] As a judge, revise a team's suggested numbers and **Save revision** — confirm that team's device sees the new numbers live, and the proposal text is untouched
 - [ ] Cast a vote as Red and as Blue on two devices — confirm each voter's chip on the vote screen is tinted by their own team color
+- [ ] With a clear majority, as judge tap **Apply winner & next round** — city totals update on every device, Round 2 scenario + fresh starters appear, votes clear; after the last round the session shows complete
+- [ ] On the complete screen, confirm every device sees all hidden roles and team scores as **team + bonus**
 
 ---
 
@@ -70,8 +72,12 @@ service cloud.firestore {
         && myTeamInRoom(roomId) == teamId;
     }
 
-    function roomPhaseIsVote(roomId) {
-      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'vote';
+    function roomPhaseRevealsProposals(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase in ['vote', 'complete'];
+    }
+
+    function roomPhaseIsComplete(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.phase == 'complete';
     }
 
     function isVotingEligible(roomId) {
@@ -89,14 +95,16 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId}/secrets/{playerId} {
-      allow read: if isSelf(playerId) || isJudgeInRoom(roomId);
+      allow read: if isSelf(playerId)
+        || isJudgeInRoom(roomId)
+        || (signedIn() && roomPhaseIsComplete(roomId));
       allow write: if isSelf(playerId);
     }
 
     match /rooms/{roomId}/proposals/{teamId} {
       allow read: if isTeammateProposal(roomId, teamId)
         || isJudgeInRoom(roomId)
-        || (signedIn() && roomPhaseIsVote(roomId));
+        || (signedIn() && roomPhaseRevealsProposals(roomId));
       allow write: if isTeammateProposal(roomId, teamId) || isJudgeInRoom(roomId);
     }
 
@@ -105,7 +113,7 @@ service cloud.firestore {
       allow create, update: if isSelf(playerId)
         && isVotingEligible(roomId)
         && request.resource.data.voterTeam == myTeamInRoom(roomId);
-      allow delete: if isSelf(playerId);
+      allow delete: if isSelf(playerId) || isJudgeInRoom(roomId);
     }
 
     match /{document=**} {
@@ -132,7 +140,11 @@ service cloud.firestore {
 rooms/{CODE}
   code, themeId, themeName, createdAt, createdBy, playerCount
   timerEndsAtMs   // shared discussion countdown target (epoch ms); set on stage entry, judges can extend it
-  phase           // "discuss" (default) | "vote" — a judge flips this to reveal both proposals
+  phase           // "discuss" | "vote" | "complete"
+  scenarioId      // current CSV scenario; advances with next round
+  roundOrder      // current round_order from CSV
+  categoryTotals  // { jobs, housing, accessibility, climate, cost } — running city status
+  lastWinnerTeam  // "red" | "blue" — set when a judge applies a vote winner
 
 rooms/{CODE}/players/{uid}          // public roster
   displayName, emoji, team, joinedAt   // team is "red" | "blue" | "judge"

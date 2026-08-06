@@ -159,6 +159,25 @@ export async function loadFirstScenario(): Promise<Scenario> {
   return scenarios[0];
 }
 
+export async function loadScenarioById(scenarioId: string): Promise<Scenario> {
+  const scenarios = await loadScenarios();
+  const match = scenarios.find((s) => s.scenario_id === scenarioId);
+  if (!match) {
+    throw new Error(`No scenario with id "${scenarioId}"`);
+  }
+  return match;
+}
+
+/** Next scenario after this round_order, or null if the session is over. */
+export async function loadNextScenario(
+  afterRoundOrder: number,
+): Promise<Scenario | null> {
+  const scenarios = await loadScenarios();
+  return (
+    scenarios.find((s) => s.round_order > afterRoundOrder) ?? null
+  );
+}
+
 export async function loadStarterProposal(
   scenarioId: string,
   team: TeamId,

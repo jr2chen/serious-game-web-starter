@@ -250,15 +250,39 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** A judge taps the button and a second device (mid-discussion) flips straight to the vote screen with both proposals visible; casting a vote on one device shows up live on another; a judge's Save revision updates that team's numbers live without touching their text.
 
-### Slice C — Facilitator finalizes deltas (next)
+### Slice C — Apply winner & next round (done)
 
-Facilitator/judge enters the final −2…+2 per category for the round; totals update.
+**Goal:** After the public vote, a judge applies the winning proposal to the city's running totals and opens the next CSV scenario (or finishes the session).
+
+**Stories:**
+- As a judge on the vote screen, I **pick** Red or Blue to adopt (public tally is advisory — ties are fine)
+- As a judge, I can edit either proposal’s **text and numbers** during discuss and during voting
+- As anyone, the adopted proposal’s numbers update shared `categoryTotals` on the room
+- As anyone, if another scenario exists in CSV, everyone returns to **discuss** with that scenario, fresh starter proposals, cleared votes, and a restarted timer
+- As anyone, if that was the last scenario, the room moves to **complete** with final city totals
+
+**Keep simple:** No automatic majority winner; the judge always chooses.
+
+**Done when:** After Round 1 voting, a judge adopts a team and city chips update on a second device, then everyone flips to Round 2's scenario + blank-slate starters.
 
 ---
 
-## Epic 6 — Scoring and next round
+## Epic 6 — Scoring and end game
 
-Show running category totals and team scores (derived). Clear proposals between rounds. At end game: reveal roles and score hidden-role conditions once.
+### Slice A — Role reveal + team + bonus (done)
+
+**Goal:** On the session-complete screen, reveal every hidden role and show each team’s score as **team + bonus**.
+
+**Stories:**
+- As anyone, when the session completes I see a **team scoreboard** (category totals only — no role bonuses) and below it a **player scoreboard** ranked by each player’s total (`team + own bonus`)
+- As anyone, every player’s hidden role is revealed with whether its condition was met against the final city totals
+- As a developer, `secrets/{uid}` becomes readable to the whole room only when `phase == "complete"`
+
+**Done when:** After the last round is applied, a non-judge device sees both scoreboards and every role without a permission error.
+
+### Slice B — Polish (next)
+
+Empty/loading polish for the reveal; optional combined total display.
 
 ---
 
@@ -279,9 +303,9 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 7. Epic 4 — editable private team proposals (done)
 8. Epic 5a — judge seat: both proposals, all roles, shared timer (done)
 9. Epic 5b — judge-triggered public vote screen, with judge number revisions + colored voter chips (done)
-10. Epic 5c — facilitator applies final deltas (next)
-11. Epic 6 — derived scores + next/end
-12. Epic 7 — polish
+10. Epic 5c — apply vote winner to city totals + advance scenario (done)
+11. Epic 6a — end-game role reveal + team + bonus scores (done)
+12. Epic 7 — polish (next)
 
 ---
 
