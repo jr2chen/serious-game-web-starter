@@ -27,7 +27,7 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **Blue**, or **Judge**.
 
 **Red / Blue** — unchanged from Epic 4:
-- Your team’s proposal starts from the CSV starter (text + five suggested changes)
+- Your team’s proposal starts from a blank CSV placeholder (“Put your proposal here…”) with all category effects at **0**, plus a reminder of which scores link to your team (Red → Jobs & Housing; Blue → Accessibility & Climate)
 - Anyone on the team can edit the text and nudge each number up to **±4**, then tap **Submit revision**
 - Teammates’ screens update automatically when someone Submits (last write wins — prefer one reviser at a time)
 - The other team still cannot see your draft
@@ -146,9 +146,9 @@ One row = one team’s starting draft for a scenario (Red or Blue).
 | `scenario_id` | Must match a row in `scenarios.csv` | |
 | `team` | `red` or `blue` | |
 | `proposal_text` | Starting proposal wording | quote if it has commas |
-| `jobs` `housing` `accessibility` `climate` `cost` | Suggested effects | whole numbers from **-2 to +2** |
+| `jobs` `housing` `accessibility` `climate` `cost` | Starting effects | whole numbers from **-2 to +2** (sample uses all `0`) |
 
-These **prefill** the team’s shared draft when a room first needs one. Players edit and Submit on stage; each Submit overwrites the live draft for that team.
+Sample rows are blank placeholders: “Put your proposal here…” plus a team-score reminder (Red → Jobs & Housing; Blue → Accessibility & Climate), with zeros for every category. They **prefill** the team’s shared draft when a room first needs one. Players edit and Submit on stage; each Submit overwrites the live draft for that team. Already-seeded rooms keep their old draft until the next round or a new room.
 
 ---
 
@@ -183,6 +183,7 @@ These **prefill** the team’s shared draft when a room first needs one. Players
 - Prefer **Tailwind utility classes in the JSX** for layout and one-off visuals.
 - Reuse the small recipes in [`app/globals.css`](app/globals.css) (`.btn`, `.card`, `.chip`, `.label-mono`) when a widget appears in several places.
 - Change the palette in the `:root` block of `globals.css` — those tokens feed Tailwind (`bg-forest`, `text-ink-soft`, etc.).
+- The outer page frame (around the phone-width card) uses soft team blue (`bg-team-blue-soft` on the body in [`app/layout.tsx`](app/layout.tsx)).
 - Avoid adding large new custom CSS files; keep styles next to the markup so renames can’t silently drop styling.
 
 ---

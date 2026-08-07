@@ -33,7 +33,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${fraunces.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex justify-center bg-paper-deep px-4 py-8 font-sans text-ink max-[480px]:p-0">
+      <body className="min-h-full flex justify-center bg-team-blue-soft px-4 py-8 font-sans text-ink max-[480px]:p-0">
         {children}
       </body>
     </html>
