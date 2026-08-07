@@ -33,6 +33,30 @@ export type HiddenRole = {
   target_category: CategoryId;
   comparison: ComparisonOp;
   threshold: number;
+  /** Points awarded when the role condition is met at end of game. */
+  points: number;
+};
+
+/**
+ * How a player's "base" score is computed on the final scoreboard.
+ * - categories: capped team points (0–2 from goal categories above 0)
+ * - policy: points if that player's team was the last adopted proposal
+ */
+export type PlayerBaseScoring = "categories" | "policy";
+
+/**
+ * How role bonus is computed on the player scoreboard.
+ * - fixed: roles.csv `points` when the role condition is met (else 0)
+ * - category: final city total for the role's target category (can be + or −)
+ *   — the "corruption" style: reward how that area ended, not a flat bonus
+ */
+export type RoleBonusScoring = "fixed" | "category";
+
+export type ScoringConfig = {
+  player_base: PlayerBaseScoring;
+  /** Points for a policy win when player_base is "policy" (from scoring.csv). */
+  policy_win_points: number;
+  role_bonus: RoleBonusScoring;
 };
 
 export type CategoryTotals = Record<CategoryId, number>;
@@ -98,6 +122,8 @@ export type Room = {
   roundOrder?: number;
   /** Running city category totals — updated when a vote winner is applied. */
   categoryTotals?: CategoryTotals;
+  /** Last proposal the judge adopted — used by policy-style player scoring. */
+  lastWinnerTeam?: TeamId;
 };
 
 export type RoomPlayer = {

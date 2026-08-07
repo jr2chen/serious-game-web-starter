@@ -1,4 +1,4 @@
-# Commons — Epic 6a: role reveal + team + bonus
+# Commons — Dual player-scoring styles (CSV flip)
 
 A tiny multiplayer workshop game starter. This repo is meant to be **readable by non-technical people**: small increments, plain-language docs, and CSV-driven game content you can edit without touching React.
 
@@ -12,12 +12,9 @@ Firestore rules (production): [`docs/FIRESTORE_RULES.md`](docs/FIRESTORE_RULES.m
 
 ## How we got here
 
-**Epic 0–2** — UI shell, teams/roles, CSV content  
-**Epic 3** — Firebase rooms, roster, rejoin  
-**UI/UX improvements** — UI styles moved to Tailwind; main screen shows a QR for the current URL  
-**Epic 4** — shared editable team proposal (Submit overwrites for teammates)  
-**Epic 5** — Judge seat, public vote, apply winner & next round / session complete  
-**This slice** — Epic 6a: on the final screen, **reveal every hidden role** and show each team as **team + bonus** (category score + met role bonuses)  
+**Epic 0–5** — rooms, proposals, judge, vote, adopt & next round, session complete  
+**Epic 6a** — role reveal + scoreboards  
+**This slice** — spreadsheet-driven **player scoring styles**: keep category-based player totals, or flip to policy-win + role points  
 **Next** — Epic 7 polish
 
 ---
@@ -42,8 +39,9 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 - On the vote screen, keep editing either proposal; when ready, **Adopt Red** or **Adopt Blue** (public tally is advisory) — that proposal’s numbers update the city, votes clear, and everyone lands on the next scenario (or **session complete** after the last round)
 
 **Session complete** — after the last round is applied:
-- A **team scoreboard** on top — each team’s category total only (Red = Jobs+Housing, Blue = Accessibility+Climate; no role bonuses)
-- A **player scoreboard** below, ranked by each player’s **total** (team points + their own role bonus), with the role reveal under each row
+- A **team scoreboard** on top — **0–2 points**: +1 for each of that team’s two goal categories that ends above 0 (no role bonuses)
+- A **player scoreboard** below, ranked by each player’s **total** (`base + role`), with the role reveal under each row
+- **Base** comes from [`content/scoring.csv`](content/scoring.csv): `categories` (that capped team score) or `policy` (points if their team’s proposal was last adopted). **Role** bonus is also spreadsheet-driven: `fixed` uses each role’s `points` when the condition is met, or `category` (corruption style) uses that area’s final city value — housing/jobs/etc. as-is; **cost reduction** scores as `threshold − cost` (below +2 is positive, above is negative). In corruption mode, joins are skewed: **Blue ~60% housing**, **Red ~60% cost**
 
 The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
 
@@ -121,8 +119,9 @@ One row = one hidden role. A player is randomly assigned one role when they ente
 | `target_category` | Which city total is checked | `jobs` `housing` `accessibility` `climate` `cost` |
 | `comparison` | How that total is compared | `>` `>=` `<` `<=` `=` |
 | `threshold` | Number to compare against | any number, often `0` or `2` |
+| `points` | Bonus if the condition is met | whole number ≥ 0 (default sample uses `1`) |
 
-**Scoring rule:** at end of game the player scores **1 point** if  
+**Role bonus:** at end of game the player scores **`points`** if  
 `final[target_category] comparison threshold` is true, else **0**.
 
 Examples:
@@ -134,6 +133,35 @@ Examples:
 | Cost stays under +2 | `<` | `2` |
 
 Default Fiscal Watchdog uses `cost` + `<` + `2` so the role is still achievable when projects cost money.
+
+---
+
+### `content/scoring.csv`
+
+One row = how **player** totals are built on the final scoreboard (team totals always stay category-only).
+
+| Column | Meaning | Allowed values |
+| --- | --- | --- |
+| `player_base` | What counts as the player’s base before role points | `categories` or `policy` |
+| `policy_win_points` | Points for being on the last-adopted team when `player_base` is `policy` | whole number ≥ 0 |
+| `role_bonus` | How the role half of the player total is computed | `fixed` or `category` |
+
+**Base styles (`player_base`):**
+- `categories` (default sample) — capped team points (0–2)
+- `policy` — `policy_win_points` if their team was last adopted, else `0`
+
+**Role styles (`role_bonus`):**
+- `fixed` — add `roles.csv` `points` when the role condition is met, else `0`
+- `category` — **corruption mode**:
+  - Most roles: add the final city total for that target category (+ or −)
+  - **Cost** roles: add `threshold − cost` (sample Fiscal Watchdog uses threshold `2`, so cost `0` → `+2`, cost `3` → `−1`)
+  - On join: **Blue** has a 60% chance of a housing role, **Red** 60% chance of a cost role (otherwise a different role)
+
+**Corruption workshop recipe:** set `player_base` to `policy`, `policy_win_points` to `1`, and `role_bonus` to `category`.
+
+**Team points (always, on the team scoreboard and as `categories` base):** for that team’s two goal categories, score **+1 per category that ends above 0** — so 0, 1, or 2 max. Raw city totals are not summed for the team board.
+
+To flip styles: edit this file, save, refresh, and start a new stage load (rejoin / re-enter).
 
 ---
 

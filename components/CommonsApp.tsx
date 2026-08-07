@@ -12,6 +12,7 @@ import {
   getNextScenario,
   getRoom,
   getScenario,
+  getScoringConfig,
   getStarterProposal,
   listRooms,
   loadMySeat,
@@ -37,6 +38,7 @@ import type {
   RoomPhase,
   RoomPlayer,
   Scenario,
+  ScoringConfig,
   SeatRole,
   StarterProposal,
   TeamId,
@@ -51,7 +53,7 @@ import {
 } from "@/lib/game/constants";
 import {
   isTeamId,
-  roleConditionMet,
+  playerScoreBreakdown,
   roleRuleLabel,
   teamCategoryScore,
 } from "@/lib/game/scoring";
@@ -200,6 +202,12 @@ export default function CommonsApp() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [hiddenRole, setHiddenRole] = useState<HiddenRole | null>(null);
   const [categories, setCategories] = useState<CategoryTotals | null>(null);
+  /** From content/scoring.csv — flips player scoreboard base style. */
+  const [scoringConfig, setScoringConfig] = useState<ScoringConfig | null>(
+    null,
+  );
+  /** Last judge-adopted team — used when player_base is "policy". */
+  const [lastWinnerTeam, setLastWinnerTeam] = useState<TeamId | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [roster, setRoster] = useState<RoomPlayer[]>([]);
   const [rosterOpen, setRosterOpen] = useState(false);
@@ -519,6 +527,7 @@ export default function CommonsApp() {
         setStagePhase(nextPhase);
         if (room?.categoryTotals) setCategories(room.categoryTotals);
         if (room?.scenarioId) setRoomScenarioId(room.scenarioId);
+        setLastWinnerTeam(room?.lastWinnerTeam ?? null);
       },
       (error) => {
         if (active && !isPermissionDeniedError(error)) {
@@ -635,6 +644,8 @@ export default function CommonsApp() {
     setTimerEndsAtMs(null);
     setHiddenRole(null);
     setCategories(null);
+    setScoringConfig(null);
+    setLastWinnerTeam(null);
     setLoadError(null);
     setRoster([]);
     setRosterOpen(false);
@@ -699,7 +710,10 @@ export default function CommonsApp() {
 
     try {
       setLoadError(null);
-      const existingRoom = await getRoom(selectedRoom.code);
+      const [existingRoom, scoring] = await Promise.all([
+        getRoom(selectedRoom.code),
+        getScoringConfig(),
+      ]);
       const bootstrap = existingRoom?.scenarioId
         ? await getScenario(existingRoom.scenarioId)
         : await getScenario();
@@ -754,6 +768,8 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(role);
       setCategories(round.categoryTotals);
+      setScoringConfig(scoring);
+      setLastWinnerTeam(existingRoom?.lastWinnerTeam ?? null);
       setTimerEndsAtMs(endsAtMs);
       setMyUid(uid);
       rememberActiveRoom(selectedRoom.code);
@@ -771,9 +787,10 @@ export default function CommonsApp() {
     setRejoining(true);
     setLoadError(null);
     try {
-      const [room, seat] = await Promise.all([
+      const [room, seat, scoring] = await Promise.all([
         getRoom(rejoinCode),
         loadMySeat(rejoinCode),
+        getScoringConfig(),
       ]);
       if (!room || !seat) {
         clearActiveRoom();
@@ -827,6 +844,8 @@ export default function CommonsApp() {
       setStarter(proposal);
       setHiddenRole(seat.role);
       setCategories(round.categoryTotals);
+      setScoringConfig(scoring);
+      setLastWinnerTeam(room.lastWinnerTeam ?? null);
       setTimerEndsAtMs(endsAtMs);
       setMyUid(uid);
       rememberActiveRoom(room.code);
@@ -1360,7 +1379,7 @@ export default function CommonsApp() {
         </div>
       )}
 
-      {screen === "stage" && scenario && team && categories && (
+      {screen === "stage" && scenario && team && categories && scoringConfig && (
           <div className="relative flex h-[min(860px,calc(100dvh-64px))] max-h-[min(860px,calc(100dvh-64px))] flex-col max-[480px]:h-dvh max-[480px]:max-h-dvh">
             <div className="flex shrink-0 flex-col gap-[10px] border-b border-line px-4 py-3">
               <div className="flex items-center gap-2">
@@ -1510,7 +1529,8 @@ export default function CommonsApp() {
                   {hiddenRole.description}
                 </p>
                 <p className="mb-2 text-[12.5px] leading-[1.45] text-ink-soft">
-                  You score 1 extra point at end of game if{" "}
+                  You score {hiddenRole.points} bonus point
+                  {hiddenRole.points === 1 ? "" : "s"} at end of game if{" "}
                   {roleRuleLabel(
                     hiddenRole.target_category,
                     hiddenRole.comparison,
@@ -1532,9 +1552,16 @@ export default function CommonsApp() {
                   Final scores &amp; role reveal
                 </h2>
                 <p className="mb-5 text-[13px] leading-[1.5] text-ink-soft">
-                  Team score is only that team&apos;s city categories (no role
-                  bonuses). Each player&apos;s total is team + their own role
-                  bonus — ranked highest first below.
+                  Team score is +1 per goal category above 0 (max 2). Player
+                  totals use <span className="font-mono">scoring.csv</span> (
+                  {scoringConfig?.player_base === "policy"
+                    ? "policy win"
+                    : "team points"}
+                  {" + "}
+                  {scoringConfig?.role_bonus === "category"
+                    ? "city value in their role’s area"
+                    : "role points"}
+                  ).
                 </p>
 
                 <p className="label-mono mb-2 text-clay-deep">Teams</p>
@@ -1556,7 +1583,8 @@ export default function CommonsApp() {
                         </span>
                       </div>
                       <p className="text-[11px] text-ink-soft">
-                        {TEAMS[t].goalLabel}
+                        {TEAMS[t].goalLabel} above 0 · up to +2
+                        {lastWinnerTeam === t ? " · last adopted" : ""}
                       </p>
                     </div>
                   );
@@ -1571,111 +1599,129 @@ export default function CommonsApp() {
                       No players to rank.
                     </p>
                   )}
-                  {[...roster]
-                    .filter((p): p is typeof p & { team: TeamId } =>
-                      isTeamId(p.team),
-                    )
-                    .map((p) => {
-                      const role = rolesByPlayerId[p.id];
-                      const known = p.id in rolesByPlayerId;
-                      const teamScore = teamCategoryScore(categories, p.team);
-                      const met =
-                        role != null &&
-                        roleConditionMet(
-                          categories[role.target_category],
-                          role.comparison,
-                          role.threshold,
+                  {scoringConfig &&
+                    [...roster]
+                      .filter((p): p is typeof p & { team: TeamId } =>
+                        isTeamId(p.team),
+                      )
+                      .map((p) => {
+                        const role = rolesByPlayerId[p.id];
+                        const known = p.id in rolesByPlayerId;
+                        const score = playerScoreBreakdown({
+                          scoring: scoringConfig,
+                          teamId: p.team,
+                          categoryTotals: categories,
+                          lastWinnerTeam,
+                          role,
+                        });
+                        return {
+                          player: p,
+                          role,
+                          known,
+                          score,
+                          total: known ? score.total : -Infinity,
+                        };
+                      })
+                      .sort((a, b) => {
+                        if (b.total !== a.total) return b.total - a.total;
+                        return a.player.displayName.localeCompare(
+                          b.player.displayName,
                         );
-                      const bonus = met ? 1 : 0;
-                      return {
-                        player: p,
-                        role,
-                        known,
-                        teamScore,
-                        bonus,
-                        met,
-                        total: known ? teamScore + bonus : -Infinity,
-                      };
-                    })
-                    .sort((a, b) => {
-                      if (b.total !== a.total) return b.total - a.total;
-                      return a.player.displayName.localeCompare(
-                        b.player.displayName,
-                      );
-                    })
-                    .map((row, index) => {
-                      const { player: p, role, known, teamScore, bonus, met } =
-                        row;
-                      const categoryName =
-                        role != null
-                          ? (CATEGORIES.find((c) => c.id === role.target_category)
-                              ?.name ?? role.target_category)
-                          : "";
+                      })
+                      .map((row, index) => {
+                        const { player: p, role, known, score } = row;
+                        const categoryName =
+                          role != null
+                            ? (CATEGORIES.find(
+                                (c) => c.id === role.target_category,
+                              )?.name ?? role.target_category)
+                            : "";
 
-                      return (
-                        <div key={p.id} className="card p-3">
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="text-[13.5px] font-semibold">
-                              <span className="mr-1.5 font-mono text-[11px] text-ink-soft">
-                                #{index + 1}
-                              </span>
-                              <span aria-hidden>{p.emoji}</span> {p.displayName}
-                            </span>
-                            <span className="font-display text-[22px] font-semibold tabular-nums">
-                              {known ? (
-                                teamScore + bonus
-                              ) : (
-                                <span className="text-[13px] font-sans font-normal text-ink-soft">
-                                  …
+                        return (
+                          <div key={p.id} className="card p-3">
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="text-[13.5px] font-semibold">
+                                <span className="mr-1.5 font-mono text-[11px] text-ink-soft">
+                                  #{index + 1}
                                 </span>
-                              )}
-                            </span>
+                                <span aria-hidden>{p.emoji}</span>{" "}
+                                {p.displayName}
+                              </span>
+                              <span className="font-display text-[22px] font-semibold tabular-nums">
+                                {known ? (
+                                  score.total
+                                ) : (
+                                  <span className="text-[13px] font-sans font-normal text-ink-soft">
+                                    …
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            <p
+                              className={`mb-2 font-mono text-[10px] ${
+                                p.team === "red" ? "text-rust" : "text-team-blue"
+                              }`}
+                            >
+                              {TEAMS[p.team].name}
+                              {known
+                                ? ` · ${score.base} ${
+                                    score.roleBonus >= 0 ? "+" : "−"
+                                  } ${Math.abs(score.roleBonus)}`
+                                : " · revealing…"}
+                            </p>
+                            {!known ? (
+                              <p className="text-[12.5px] text-ink-soft">
+                                Revealing role…
+                              </p>
+                            ) : role == null ? (
+                              <p className="text-[12.5px] text-ink-soft">
+                                No role on file
+                              </p>
+                            ) : (
+                              <>
+                                <p className="mb-1 text-[13px] font-semibold text-ink">
+                                  {role.role_name}
+                                </p>
+                                <p className="mb-1 text-[12px] leading-[1.45] text-ink-soft">
+                                  {roleRuleLabel(
+                                    categoryName,
+                                    role.comparison,
+                                    role.threshold,
+                                  )}{" "}
+                                  · final {categoryName}{" "}
+                                  {categories[role.target_category] > 0
+                                    ? "+"
+                                    : ""}
+                                  {categories[role.target_category]}
+                                </p>
+                                <p
+                                  className={`font-mono text-[11px] ${
+                                    scoringConfig.role_bonus === "category"
+                                      ? score.roleBonus !== 0
+                                        ? "text-forest"
+                                        : "text-ink-soft"
+                                      : score.roleMet
+                                        ? "text-forest"
+                                        : "text-ink-soft"
+                                  }`}
+                                >
+                                  {scoringConfig.role_bonus === "category"
+                                    ? role.target_category === "cost"
+                                      ? `Cost reduction · ${
+                                          score.roleBonus > 0 ? "+" : ""
+                                        }${score.roleBonus} (${role.threshold} − cost)`
+                                      : `Role area · ${
+                                          score.roleBonus > 0 ? "+" : ""
+                                        }${score.roleBonus}`
+                                    : score.roleMet
+                                      ? `✓ Role met · +${role.points}`
+                                      : `✗ Role missed · +0`}
+                                </p>
+                              </>
+                            )}
                           </div>
-                          <p
-                            className={`mb-2 font-mono text-[10px] ${
-                              p.team === "red" ? "text-rust" : "text-team-blue"
-                            }`}
-                          >
-                            {TEAMS[p.team].name}
-                            {known
-                              ? ` · ${teamScore} + ${bonus}`
-                              : " · revealing…"}
-                          </p>
-                          {!known ? (
-                            <p className="text-[12.5px] text-ink-soft">
-                              Revealing role…
-                            </p>
-                          ) : role == null ? (
-                            <p className="text-[12.5px] text-ink-soft">
-                              No role on file
-                            </p>
-                          ) : (
-                            <>
-                              <p className="mb-1 text-[13px] font-semibold text-ink">
-                                {role.role_name}
-                              </p>
-                              <p className="mb-1 text-[12px] leading-[1.45] text-ink-soft">
-                                {roleRuleLabel(
-                                  categoryName,
-                                  role.comparison,
-                                  role.threshold,
-                                )}{" "}
-                                · final {categoryName}{" "}
-                                {categories[role.target_category] > 0 ? "+" : ""}
-                                {categories[role.target_category]}
-                              </p>
-                              <p
-                                className={`font-mono text-[11px] ${
-                                  met ? "text-forest" : "text-ink-soft"
-                                }`}
-                              >
-                                {met ? "✓ Role met · bonus +1" : "✗ Role missed · bonus 0"}
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                 </div>
 
                 {loadError && screen === "stage" && (

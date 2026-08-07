@@ -6,6 +6,7 @@ import type {
   Room,
   RoomPlayer,
   Scenario,
+  ScoringConfig,
   SeatRole,
   StarterProposal,
   TeamId,
@@ -246,6 +247,13 @@ export async function getCategoryTotals(): Promise<CategoryTotals> {
   return { ...INITIAL_CATEGORY_TOTALS };
 }
 
-export async function assignHiddenRole(_team: TeamId): Promise<HiddenRole> {
-  return getJson<HiddenRole>("/api/content/role");
+/** Workshop scoring style from content/scoring.csv. */
+export async function getScoringConfig(): Promise<ScoringConfig> {
+  return getJson<ScoringConfig>("/api/content/scoring");
+}
+
+export async function assignHiddenRole(team: TeamId): Promise<HiddenRole> {
+  return getJson<HiddenRole>(
+    `/api/content/role?team=${encodeURIComponent(team)}`,
+  );
 }

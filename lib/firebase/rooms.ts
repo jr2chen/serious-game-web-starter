@@ -26,6 +26,7 @@ import type {
   Room,
   RoomPhase,
   Scenario,
+  TeamId,
   ThemeId,
 } from "@/lib/game/types";
 
@@ -99,6 +100,10 @@ function roomFromDoc(
   const roundOrder =
     typeof data.roundOrder === "number" ? data.roundOrder : undefined;
   const categoryTotals = categoryTotalsFromData(data);
+  const lastWinnerTeam: TeamId | undefined =
+    data.lastWinnerTeam === "red" || data.lastWinnerTeam === "blue"
+      ? data.lastWinnerTeam
+      : undefined;
 
   return {
     id,
@@ -115,6 +120,7 @@ function roomFromDoc(
     scenarioId,
     roundOrder,
     categoryTotals,
+    lastWinnerTeam,
   };
 }
 

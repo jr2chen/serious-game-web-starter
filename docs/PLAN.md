@@ -22,8 +22,8 @@ Software handles rooms, privacy, shared drafting, timers, and score display. Hum
 
 | Team | Public goal categories | Team score |
 | --- | --- | --- |
-| **Red** | Jobs + Housing | `Jobs total + Housing total` |
-| **Blue** | Accessibility + Climate | `Accessibility total + Climate total` |
+| **Red** | Jobs + Housing | +1 per goal category that ends above 0 (max 2) |
+| **Blue** | Accessibility + Climate | +1 per goal category that ends above 0 (max 2) |
 
 Neither team gets points for having its proposal selected. Only judged category changes matter.
 
@@ -82,7 +82,7 @@ fiscal,Fiscal Watchdog,You want the city to keep Cost under +2 across the sessio
 - Red promotes Jobs and Housing; Blue promotes Accessibility and Climate
 - Cost is a shared constraint
 - Categories begin at zero; judges assign −2…+2 each round
-- Team scores = sum of that team’s two categories
+- Team scores = +1 per goal category ending above 0 (capped at 2)
 - No proposal-win / compromise / participation bonuses
 - Hidden roles score once at the end
 - Fiscal Watchdog defaults to Cost `< 2` (editable in CSV via comparison + threshold)
@@ -280,9 +280,41 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** After the last round is applied, a non-judge device sees both scoreboards and every role without a permission error.
 
-### Slice B — Polish (next)
+### Slice B — CSV scoring styles (done)
 
-Empty/loading polish for the reveal; optional combined total display.
+**Goal:** Editors can flip player scoring between category-based and policy-win styles without code changes.
+
+**Stories:**
+- As an editor, `roles.csv` has a `points` column for role-win value
+- As an editor, `scoring.csv` sets `player_base` to `categories` or `policy` (and `policy_win_points`)
+- As a player, the final scoreboard uses that config: base + role points, ranked by total
+
+**Done when:** Changing `player_base` to `policy` and refreshing makes the player board use last-adopted-team points instead of category totals.
+
+### Slice B2 — Corruption role bonus (done)
+
+**Goal:** Role half of player score can use the signed final city value of the role’s target category.
+
+**Stories:**
+- As an editor, `scoring.csv` `role_bonus` is `fixed` or `category`
+- As a player in corruption mode (`role_bonus=category`), my role points equal that area’s final total (+ or −), not a flat CSV bonus
+
+**Done when:** With `policy,1,category`, a Housing Advocate whose housing ends at +6 gets +6 role points on the board (even if negative for other roles).
+
+### Slice B3 — Corruption skew + cost inversion (done)
+
+**Goal:** Corruption joins bias toward team-relevant roles; cost roles score lower-cost as positive.
+
+**Stories:**
+- As a Blue joiner in corruption mode, ~60% chance of a housing role
+- As a Red joiner in corruption mode, ~60% chance of a cost role
+- As a Fiscal Watchdog, role points are `2 − cost` (below +2 positive, above negative)
+
+**Done when:** Cost ending at 0 yields +2 role points; cost at +3 yields −1; role API respects team + scoring mode.
+
+### Slice C — Polish (next)
+
+Empty/loading polish for the reveal.
 
 ---
 
@@ -305,7 +337,8 @@ Three sample scenarios, empty/loading/error states, mobile polish, full README (
 9. Epic 5b — judge-triggered public vote screen, with judge number revisions + colored voter chips (done)
 10. Epic 5c — apply vote winner to city totals + advance scenario (done)
 11. Epic 6a — end-game role reveal + team + bonus scores (done)
-12. Epic 7 — polish (next)
+12. Epic 6b — CSV scoring styles (categories vs policy) (done)
+13. Epic 7 — polish (next)
 
 ---
 
