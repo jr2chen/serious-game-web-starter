@@ -41,7 +41,7 @@ Same join/create/rejoin flow, plus a third seat on the entry screen: **Red**, **
 **Session complete** — after the last round is applied:
 - A **team scoreboard** on top — **0–2 points**: +1 for each of that team’s two goal categories that ends above 0 (no role bonuses)
 - A **player scoreboard** below, ranked by each player’s **total** (`base + role`), with the role reveal under each row
-- **Base** comes from [`content/scoring.csv`](content/scoring.csv): `categories` (that capped team score) or `policy` (points if their team’s proposal was last adopted). **Role** bonus is also spreadsheet-driven: `fixed` uses each role’s `points` when the condition is met, or `category` (corruption style) adds the final city value of that role’s target area — positive or negative
+- **Base** comes from [`content/scoring.csv`](content/scoring.csv): `categories` (that capped team score) or `policy` (points if their team’s proposal was last adopted). **Role** bonus is also spreadsheet-driven: `fixed` uses each role’s `points` when the condition is met, or `category` (corruption style) uses that area’s final city value — housing/jobs/etc. as-is; **cost reduction** scores as `threshold − cost` (below +2 is positive, above is negative). In corruption mode, joins are skewed: **Blue ~60% housing**, **Red ~60% cost**
 
 The discussion timer itself moved from a private per-tab mock to a single Firestore-backed clock (`rooms/{code}.timerEndsAtMs`) so a judge's "add time" is meaningful to the whole room. City totals and the current scenario live on the same room doc (`categoryTotals`, `scenarioId`).
 
@@ -151,8 +151,11 @@ One row = how **player** totals are built on the final scoreboard (team totals a
 - `policy` — `policy_win_points` if their team was last adopted, else `0`
 
 **Role styles (`role_bonus`):**
-- `fixed` (default sample) — add `roles.csv` `points` when the role condition is met, else `0`
-- `category` — **corruption mode**: always add the final city total for that role’s target category (can be + or −). Players are rewarded for how that area ended, not a flat bonus
+- `fixed` — add `roles.csv` `points` when the role condition is met, else `0`
+- `category` — **corruption mode**:
+  - Most roles: add the final city total for that target category (+ or −)
+  - **Cost** roles: add `threshold − cost` (sample Fiscal Watchdog uses threshold `2`, so cost `0` → `+2`, cost `3` → `−1`)
+  - On join: **Blue** has a 60% chance of a housing role, **Red** 60% chance of a cost role (otherwise a different role)
 
 **Corruption workshop recipe:** set `player_base` to `policy`, `policy_win_points` to `1`, and `role_bonus` to `category`.
 

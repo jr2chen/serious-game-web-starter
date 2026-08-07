@@ -252,6 +252,8 @@ export async function getScoringConfig(): Promise<ScoringConfig> {
   return getJson<ScoringConfig>("/api/content/scoring");
 }
 
-export async function assignHiddenRole(_team: TeamId): Promise<HiddenRole> {
-  return getJson<HiddenRole>("/api/content/role");
+export async function assignHiddenRole(team: TeamId): Promise<HiddenRole> {
+  return getJson<HiddenRole>(
+    `/api/content/role?team=${encodeURIComponent(team)}`,
+  );
 }

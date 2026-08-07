@@ -1706,9 +1706,13 @@ export default function CommonsApp() {
                                   }`}
                                 >
                                   {scoringConfig.role_bonus === "category"
-                                    ? `Role area · ${
-                                        score.roleBonus > 0 ? "+" : ""
-                                      }${score.roleBonus}`
+                                    ? role.target_category === "cost"
+                                      ? `Cost reduction · ${
+                                          score.roleBonus > 0 ? "+" : ""
+                                        }${score.roleBonus} (${role.threshold} − cost)`
+                                      : `Role area · ${
+                                          score.roleBonus > 0 ? "+" : ""
+                                        }${score.roleBonus}`
                                     : score.roleMet
                                       ? `✓ Role met · +${role.points}`
                                       : `✗ Role missed · +0`}

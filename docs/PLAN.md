@@ -301,6 +301,17 @@ Join/create → name + emoji → stage with one mock scenario.
 
 **Done when:** With `policy,1,category`, a Housing Advocate whose housing ends at +6 gets +6 role points on the board (even if negative for other roles).
 
+### Slice B3 — Corruption skew + cost inversion (done)
+
+**Goal:** Corruption joins bias toward team-relevant roles; cost roles score lower-cost as positive.
+
+**Stories:**
+- As a Blue joiner in corruption mode, ~60% chance of a housing role
+- As a Red joiner in corruption mode, ~60% chance of a cost role
+- As a Fiscal Watchdog, role points are `2 − cost` (below +2 positive, above negative)
+
+**Done when:** Cost ending at 0 yields +2 role points; cost at +3 yields −1; role API respects team + scoring mode.
+
 ### Slice C — Polish (next)
 
 Empty/loading polish for the reveal.

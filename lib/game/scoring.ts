@@ -79,10 +79,56 @@ export function teamCategoryScore(
   );
 }
 
+/** Chance a team gets its preferred role in corruption (`role_bonus=category`) mode. */
+export const CORRUPTION_ROLE_SKEW = 0.6;
+
+/**
+ * Pick a hidden role. In corruption mode, skew joins toward team interests:
+ * Blue → housing 60%, Red → cost 60%; otherwise uniform.
+ */
+export function pickHiddenRole(
+  roles: HiddenRole[],
+  team: TeamId | null | undefined,
+  scoring: ScoringConfig,
+): HiddenRole {
+  if (!roles.length) {
+    throw new Error("No roles available");
+  }
+  if (scoring.role_bonus !== "category" || team == null) {
+    return roles[Math.floor(Math.random() * roles.length)]!;
+  }
+
+  const preferredCategory = team === "blue" ? "housing" : "cost";
+  const preferred = roles.filter((r) => r.target_category === preferredCategory);
+  const others = roles.filter((r) => r.target_category !== preferredCategory);
+
+  if (preferred.length && Math.random() < CORRUPTION_ROLE_SKEW) {
+    return preferred[Math.floor(Math.random() * preferred.length)]!;
+  }
+  const pool = others.length ? others : roles;
+  return pool[Math.floor(Math.random() * pool.length)]!;
+}
+
+/**
+ * Corruption role points from a city category.
+ * Higher-is-better categories use the raw total.
+ * Cost reduction uses (threshold − cost): below threshold is positive, above is negative.
+ */
+export function categoryRoleBonus(
+  role: HiddenRole,
+  categoryTotals: CategoryTotals,
+): number {
+  const value = categoryTotals[role.target_category];
+  if (role.target_category === "cost") {
+    return role.threshold - value;
+  }
+  return value;
+}
+
 export type PlayerScoreBreakdown = {
   /** Base from scoring.csv player_base (capped team points or policy win). */
   base: number;
-  /** Role bonus — fixed CSV points when met, or raw category total (corruption). */
+  /** Role bonus — fixed CSV points when met, or category-mode corruption points. */
   roleBonus: number;
   roleMet: boolean;
   total: number;
@@ -110,8 +156,7 @@ export function playerScoreBreakdown(input: {
   let roleBonus = 0;
   if (input.role != null) {
     if (input.scoring.role_bonus === "category") {
-      // Corruption: signed final total for their target category, always.
-      roleBonus = input.categoryTotals[input.role.target_category];
+      roleBonus = categoryRoleBonus(input.role, input.categoryTotals);
     } else if (roleMet) {
       roleBonus = input.role.points;
     }
